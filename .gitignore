@@ -1,0 +1,15 @@
+# compiled python modules
+*.pyc
+*.pyo
+
+# pycache
+__pycache__/
+
+# setuptools distribution folder
+/dist/
+
+# python egg metadata
+/*.egg-info
+
+# rest
+.ipynb_checkpoints
