@@ -2,7 +2,7 @@
 
 This package is a collection of anomaly detection tools:
 
-- SSDO: semi-supervised anomaly detection
+- SSDO: semi-supervised detection of outliers
 
 
 
