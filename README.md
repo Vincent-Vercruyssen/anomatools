@@ -8,10 +8,16 @@ This package is a collection of anomaly detection tools:
 
 ## Installation
 
-Build the package using setup.py
+Build the package using setup.py:
 
 ```
 $ python setup.py install
+```
+
+...or with pip:
+
+```
+$ pip install git+https://github.com/Vincent-Vercruyssen/anomatools.git@master
 ```
 
 
