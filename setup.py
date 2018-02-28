@@ -1,5 +1,5 @@
 try:
-    from setuptools import setup
+    from setuptools import setup, find_packages
 except ImportError:
     from distutils.core import setup
 
@@ -20,7 +20,7 @@ config = {
     'install_requires': ['numpy',
                          'scipy',
                          'matplotlib'],
-    'packages': ['anomatools'],
+    'packages': find_packages(),
     'package_dir' : {'anomatools': 'anomatools'},
     'keywords': 'anomaly detection',
     'include_package_data': True,
