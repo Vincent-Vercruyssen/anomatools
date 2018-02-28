@@ -11,5 +11,8 @@ __pycache__/
 # python egg metadata
 /*.egg-info
 
+# build
+build/
+
 # rest
 .ipynb_checkpoints
