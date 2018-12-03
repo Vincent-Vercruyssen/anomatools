@@ -8,12 +8,13 @@ import scipy.stats as sps
 from collections import Counter
 from scipy.spatial import cKDTree
 
+from .BaseDetector import BaseDetector
 from ..clustering.COPKMeans import COPKMeans
 from ..utils.fastfuncs import fast_distance_matrix
 from ..utils.validation import check_X_y
 
 
-class SSDO:
+class SSDO(BaseDetector):
     """ Semi-Supervised Detection of Anomalies (SSDO)
 
     Parameters
@@ -32,19 +33,26 @@ class SSDO:
 
     contamination : float (default=0.1)
         Estimate of the expected percentage of anomalies in the data.
+
+    base_classifier : str (default='ssdo')
+        Unsupervised baseline classifier:
+            'ssdo'          --> SSDO baseline (based on constrained k-means clustering)
+            'precomputed'  --> use precomputed prior scores from another classifier
     """
 
-    def __init__(self, n_clusters=10, alpha=2.3, k=30, contamination=0.1,
+    def __init__(self, n_clusters=10, alpha=2.3, k=30, contamination=0.1, base_classifier='ssdo',
                  tol=1e-8, verbose=False):
+        super(BaseDetector, self).__init__()
 
-        self.nc = n_clusters
-        self.alpha = alpha
-        self.k = k
-        self.c = contamination
+        self.nc = int(n_clusters)
+        self.alpha = float(alpha)
+        self.k = int(k)
+        self.c = float(contamination)
+        self.base_classifier = str(base_classifier)
         self.tol = tol
-        self.verbose = verbose
+        self.verbose = bool(verbose)
 
-    def fit_predict(self, X, y=None):
+    def fit_predict(self, X, y=None, prior=None):
         """ Fit the model to the training set X and returns the anomaly score
             of the instances in X.
 
@@ -52,6 +60,8 @@ class SSDO:
             The samples to compute anomaly score w.r.t. the training samples.
         :param y : np.array(), shape (n_samples), default = None
             Labels for examples in X.
+        :param prior : np.array(), shape (n_samples), default = None
+            Precomputed unsupervised anomaly scores.
 
         :returns y_score : np.array(), shape (n_samples)
             Anomaly score for the examples in X.
@@ -59,15 +69,17 @@ class SSDO:
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
 
-        return self.fit(X, y)._predict()
+        return self.fit(X, y, prior)._predict()
 
-    def fit(self, X, y=None):
+    def fit(self, X, y=None, prior=None):
         """ Fit the model using data in X.
 
         :param X : np.array(), shape (n_samples, n_features)
             The samples to compute anomaly score w.r.t. the training samples.
         :param y : np.array(), shape (n_samples), default = None
             Labels for examples in X.
+        :param prior : np.array(), shape (n_samples), default = None
+            Precomputed unsupervised anomaly scores.
 
         :returns self : object
         """
@@ -78,8 +90,19 @@ class SSDO:
         if y is None:
             y = np.zeros(n, dtype=int)
 
-        # compute the constrained-clustering-based score (scaled)
-        prior = self._compute_prior(X, y)
+        # compute the prior using different base classifiers
+        if self.base_classifier == 'ssdo':
+            # compute the constrained-clustering-based score (scaled)
+            prior = self._compute_prior(X, y)
+        elif self.base_classifier == 'precomputed':
+            # require that the score of the baseline classifer is scaled between 0 and 1
+            # use simple min-max scaling (there are probably better methods!)
+            if isinstance(prior, np.ndarray) and len(prior) == n:
+                prior = (prior - min(prior)) / (max(prior) - min(prior))
+            else:
+                raise BaseException('Pre-computed baseline requires prior anomaly scores!')
+        else:
+            raise BaseException('Invalid unsupervised baseline classifier!')
 
         # compute eta parameter
         eta = self._compute_eta(X)
