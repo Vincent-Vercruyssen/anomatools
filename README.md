@@ -3,7 +3,6 @@
 This package is a collection of anomaly detection tools:
 
 - SSDO: semi-supervised detection of outliers
-- iForest: isolation forest
 - iNNe: isolation-based nearest neighbor ensembles
 - kNNo: k-nearest neighbor anomaly detection
 
@@ -37,6 +36,7 @@ See notebooks/ for examples.
 - [Numpy](http://www.numpy.org)
 - [Scipy](http://www.scipy.org)
 - [Scikit-learn](https://scikit-learn.org/stable/)
+- [Seaborn](https://seaborn.pydata.org/) --> optional
 
 
 
