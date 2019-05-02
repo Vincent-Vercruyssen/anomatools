@@ -2,6 +2,7 @@
 
 # Authors: Vincent Vercruyssen
 
+import math
 import numpy as np
 import random
 
@@ -11,25 +12,42 @@ from ..utils.fastfuncs import fast_distance_matrix
 class COPKMeans:
     """ Constrained k-means clustering """
 
-    def __init__(self, n_clusters=10, init='kmpp', n_init=3, max_iter=300):
+    def __init__(self, n_clusters=10, init='kmpp', n_init=3, max_iter=300, chunk_size=2000):
 
         self.k = n_clusters
         self.init = init
         self.n_init = n_init
         self.max_iter = max_iter
+        self.chunk_size = chunk_size
         self.sample_tol = 1e-10
         self.n_samples = None
         self.D_matrix_ = None
         self.labels_ = None
         self.cluster_centers_ = None
 
-    def fit(self, X, Y=None, must_link=np.array([]), cannot_link=np.array([])):
+    def fit_predict(self, X, must_link=np.array([]), cannot_link=np.array([])):
         """ Fit COP Kmeans clustering to the data given the constraints.
 
         :param X: np.array()
             2D data array to be clustered.
-        :param k: int
-            Number of clusters.
+        :param must_link: np.array() [n_mlcs, 2]
+            Indices of the must link datapoints.
+        :param cannot_link : np.array() [n_clcs, 2]
+            Indices of cannot link datapoints.
+
+        :returns cluster_centers_: np.array()
+            Cluster centroids.
+        :returns labels_: np.array()
+            Labels of the centroids to which the points belong.
+        """
+
+        return self.fit(X, must_link, cannot_link)._predict()
+
+    def fit(self, X, must_link=np.array([]), cannot_link=np.array([])):
+        """ Fit COP Kmeans clustering to the data given the constraints.
+
+        :param X: np.array()
+            2D data array to be clustered.
         :param must_link: np.array() [n_mlcs, 2]
             Indices of the must link datapoints.
         :param cannot_link : np.array() [n_clcs, 2]
@@ -60,10 +78,58 @@ class COPKMeans:
                 self.inertia_ = inertia
                 self.n_clusters = fk
 
-    def predict(self):
-        """ Return the labels of the data on which the clustering is fitted. """
+        # print('fitting copkmeans done')
+        return self
 
-        return self.labels_, self.cluster_centers_
+    def predict(self, X, include_distances=False):
+        """ Predict the cluster labels of the given points.
+
+        :param X: np.array()
+            2D data array to be clustered.
+        :param include_distances: bool
+            Return the distances to the centers.
+
+        :returns cluster_centers_: np.array()
+            Cluster centroids.
+        :returns labels_: np.array()
+            Labels of the centroids to which the points belong.
+        :returns distances: np.array()
+            Distances to the cluster centers.
+        """
+
+        n, _ = X.shape
+        labels = np.zeros(n, dtype=int)
+        if include_distances:
+            distances = np.zeros(n, dtype=np.float)
+
+        # compute labels in chunks
+        n_chunks = math.ceil(n / self.chunk_size)
+        for i in range(n_chunks):
+            X_chunk = X[i*self.chunk_size:(i+1)*self.chunk_size, :]
+            # compute the distance to each cluster centroid
+            D_matrix = fast_distance_matrix(X_chunk, self.cluster_centers_)
+            # select the centroid with the lowest distance
+            cc_indices = np.argsort(D_matrix, axis=1)
+            labels[i*self.chunk_size:(i+1)*self.chunk_size] = cc_indices[:, 0].T
+            # return the distances
+            if include_distances:
+                dists = np.sort(D_matrix, axis=1)
+                distances[i*self.chunk_size:(i+1)*self.chunk_size] = dists[:, 0].T
+
+        if include_distances:
+            return self.cluster_centers_, labels, distances
+        return self.cluster_centers_, labels
+
+    def _predict(self):
+        """ Predict the cluster labels based on the centroids.
+
+        :returns centers: np.array()
+            Cluster centroids.
+        :returns cluster_labels: np.array()
+            Labels of the centroids to which the points belong.
+        """
+
+        return self.cluster_centers_, self.labels_
 
     def _single_cop_kmeans(self, data, k, ml_graph, cl_graph):
         """ Core COP Kmeans algorithm.

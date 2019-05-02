@@ -7,6 +7,7 @@ import scipy.stats as sps
 
 from collections import Counter
 from scipy.spatial import cKDTree
+from sklearn.ensemble import IsolationForest
 
 from .BaseDetector import BaseDetector
 from ..clustering.COPKMeans import COPKMeans
@@ -36,8 +37,9 @@ class SSDO(BaseDetector):
 
     base_classifier : str (default='ssdo')
         Unsupervised baseline classifier:
-            'ssdo'          --> SSDO baseline (based on constrained k-means clustering)
-            'precomputed'  --> use precomputed prior scores from another classifier
+            'ssdo'    --> SSDO baseline (based on constrained k-means clustering)
+            'IF'      --> IsolationForest as the base classifier
+            'other'   --> use a different classifier passed to SSDO
     """
 
     def __init__(self, n_clusters=10, alpha=2.3, k=30, contamination=0.1, base_classifier='ssdo',
@@ -52,7 +54,7 @@ class SSDO(BaseDetector):
         self.tol = tol
         self.verbose = bool(verbose)
 
-    def fit_predict(self, X, y=None, prior=None):
+    def fit_predict(self, X, y=None, base_classifier=None):
         """ Fit the model to the training set X and returns the anomaly score
             of the instances in X.
 
@@ -60,8 +62,8 @@ class SSDO(BaseDetector):
             The samples to compute anomaly score w.r.t. the training samples.
         :param y : np.array(), shape (n_samples), default = None
             Labels for examples in X.
-        :param prior : np.array(), shape (n_samples), default = None
-            Precomputed unsupervised anomaly scores.
+        :param base_classifier : object
+            Base classifier to detect the anomalies if SSDO is not used.
 
         :returns y_score : np.array(), shape (n_samples)
             Anomaly score for the examples in X.
@@ -69,51 +71,67 @@ class SSDO(BaseDetector):
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
 
-        return self.fit(X, y, prior)._predict()
+        return self.fit(X, y, base_classifier).predict(X)
 
-    def fit(self, X, y=None, prior=None):
+    def fit(self, X, y=None, base_classifier=None):
         """ Fit the model using data in X.
 
         :param X : np.array(), shape (n_samples, n_features)
             The samples to compute anomaly score w.r.t. the training samples.
         :param y : np.array(), shape (n_samples), default = None
             Labels for examples in X.
-        :param prior : np.array(), shape (n_samples), default = None
-            Precomputed unsupervised anomaly scores.
+        :param base_classifier : object
+            Base classifier to detect the anomalies if SSDO is not used.
 
         :returns self : object
         """
 
         X, y = check_X_y(X, y)
-
         n, _ = X.shape
         if y is None:
             y = np.zeros(n, dtype=int)
 
         # compute the prior using different base classifiers
         if self.base_classifier == 'ssdo':
-            # compute the constrained-clustering-based score (scaled)
-            prior = self._compute_prior(X, y)
-        elif self.base_classifier == 'precomputed':
-            # require that the score of the baseline classifer is scaled between 0 and 1
-            # use simple min-max scaling (there are probably better methods!)
-            if isinstance(prior, np.ndarray) and len(prior) == n:
-                prior = (prior - min(prior)) / (max(prior) - min(prior))
-            else:
-                raise BaseException('Pre-computed baseline requires prior anomaly scores!')
+            # COPKMeans classifier
+            self._fit_prior_parameters(X, y)
+        elif self.base_classifier == 'other':
+            # check the validity of the classifier
+            if not isinstance(base_classifier, object):
+                raise ValueError('ERROR: `base_classifier` should be an object with a fit() and predict()')
+            has_fit = callable(getattr(base_classifier, 'fit', None))
+            has_pre = callable(getattr(base_classifier, 'predict', None))
+            if not has_fit:
+                raise Exception('ERROR: `base_classifier` has not fit() function')
+            if not has_pre:
+                raise Exception('ERROR: `base_classifier` has no predict() function')
+            self.prior_detector = base_classifier
+            self.prior_detector.fit(X)
+        elif self.base_classifier == 'IF':
+            # use Isolation Forest
+            self.prior_detector = IsolationForest(n_estimators=500, max_samples='auto')
+            self.prior_detector.fit(X)
         else:
-            raise BaseException('Invalid unsupervised baseline classifier!')
+            raise ValueError('ERROR: invalid choice of `base_classifier` (`ssdo`, `IF`, or `other`)')
 
         # compute eta parameter
-        eta = self._compute_eta(X)
+        self.eta = self._compute_eta(X)
 
-        # update the clustering score with label propragation
-        self.posterior = self._compute_posterior(X, y, prior, eta)
+        # store the labeled points
+        self.labels_available = False
+        ixl = np.where(y != 0.0)[0]
+        if len(ixl) > 0:
+            self.labels_available = True
+            self._labels = y[ixl]
+            self._X_labels = X[ixl, :]
 
         return self
 
-    def _predict(self):
-        """ Compute the anomaly score + predict the label of instances in X.
+    def predict(self, X):
+        """ Compute the anomaly score for unseen instances.
+
+        :param X : np.array(), shape (n_samples, n_features)
+            The samples in the test set for which to compute the anomaly score.
 
         :returns y_score : np.array(), shape (n_samples)
             Anomaly score for the examples in X.
@@ -121,19 +139,87 @@ class SSDO(BaseDetector):
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
 
-        n = len(self.posterior)
+        X, _ = check_X_y(X, None)
+        n, _ = X.shape
 
-        # compute y_score
-        y_score = self.posterior
+        # compute the prior
+        if self.base_classifier == 'ssdo':
+            prior = self._compute_prior(X)
+            # already normalized between 0 and 1
+        elif self.base_classifier == 'other':
+            prior = self.prior_detector.predict(X)
+            prior = (prior - min(prior)) / (max(prior) - min(prior))
+        elif self.base_classifier == 'IF':
+            prior = self.prior_detector.decision_function(X) * -1
+            prior = (prior - min(prior)) / (max(prior) - min(prior))
+        else:
+            print('WARNING: no `base_classifier` for predict()')
+            prior = np.ones(n, dtype=np.float)
 
-        # compute y_pred
+        # scale the prior using the squashing function
+        # TODO: this is the expected contamination in the test set!
+        gamma = np.sort(prior)[int(n * (1.0 - self.c))] + self.tol
+        prior = np.array([1 - self._squashing_function(x, gamma) for x in prior])
+
+        # compute the posterior
+        if self.labels_available:
+            y_score = self._compute_posterior(X, prior, self.eta)
+        else:
+            y_score = prior
+
+        # y_pred (using the expected contamination)
+        # TODO: this is the expected contamination in the test set!
         offset = np.sort(y_score)[int(n * (1.0 - self.c))]
         y_pred = np.ones(n, dtype=int)
         y_pred[y_score < offset] = -1
 
         return y_score, y_pred
 
-    def _compute_prior(self, X, y):
+    def _fit_prior_parameters(self, X, y):
+        """ Fit the parameters for computing the prior score:
+            - (constrained) clustering
+            - cluster size
+            - max intra-cluster distance
+            - cluster deviation
+        """
+
+        # construct cannot-link constraints + remove impossible cannot-links
+        ixn = np.where(y == -1.0)[0]
+        ixa = np.where(y == 1.0)[0]
+        cl = np.array(np.meshgrid(ixa, ixn)).T.reshape(-1,2)
+
+        # cluster
+        self.clus = COPKMeans(n_clusters=self.nc)
+        centroids, labels = self.clus.fit_predict(X, cannot_link=cl)
+        self.nc = self.clus.n_clusters
+
+        # cluster sizes (Counter sorts by key!)
+        self.cluster_sizes = np.array(list(Counter(labels).values())) / max(Counter(labels).values())
+
+        # compute the max intra-cluster distance
+        self.max_intra_cluster = np.zeros(self.nc, dtype=np.float)
+        for i, l in enumerate(labels):
+            c = centroids[l, :]
+            d = np.linalg.norm(X[i, :] - c)
+            if d > self.max_intra_cluster[l]:
+                self.max_intra_cluster[l] = d
+
+        # compute the inter-cluster distances
+        if self.nc == 1:
+            self.cluster_deviation = np.array([1])
+        else:
+            inter_cluster = np.ones(self.nc, dtype=np.float) * np.inf
+            for i in range(self.nc):
+                for j in range(self.nc):
+                    if i != j:
+                        d = np.linalg.norm(centroids[i, :] - centroids[j, :])
+                        if not(d < self.tol) and d < inter_cluster[i]:
+                            inter_cluster[i] = d
+        self.cluster_deviation = inter_cluster / max(inter_cluster)
+
+        return self
+
+    def _compute_prior(self, X):
         """ Compute the constrained-clustering-based outlier score.
 
         :returns prior : np.array(), shape (n_samples)
@@ -142,51 +228,21 @@ class SSDO(BaseDetector):
 
         n, _ = X.shape
 
-        # constrained clustering of the data
-        labels, centroids = self._constrained_clustering(X, y)
-
-        # compute cluster sizes
-        cluster_size = np.array(list(Counter(labels).values())) / max(Counter(labels).values())
-
-        # compute the max intra-cluster distance + distances to centroids
-        distances = np.zeros(n)
-        max_intra_cluster = np.zeros(self.nc)
-        for i, l in enumerate(labels):
-            c = centroids[l, :]
-            d = np.linalg.norm(X[i, :] - c)
-            if d > max_intra_cluster[l]:
-                max_intra_cluster[l] = d
-            distances[i] = d
-
-        # compute the inter-cluster distance
-        if self.nc == 1:
-            inter_cluster = np.ones(self.nc)
-        else:
-            inter_cluster = np.ones(self.nc) * np.inf
-            for i in range(self.nc):
-                for j in range(self.nc):
-                    if i != j:
-                        d = np.linalg.norm(centroids[i, :] - centroids[j, :])
-                        if not(d < self.tol) and d < inter_cluster[i]:
-                            inter_cluster[i] = d
-        cluster_deviation = inter_cluster / max(inter_cluster)
+        # predict the cluster labels + distances to the clusters
+        _, labels, distances = self.clus.predict(X, include_distances=True)
 
         # compute the prior
         prior = np.zeros(n)
         for i, l in enumerate(labels):
-            if max_intra_cluster[l] < self.tol:
+            if self.max_intra_cluster[l] < self.tol:
                 point_deviation = 1.0
             else:
-                point_deviation = distances[i] / max_intra_cluster[l]
-            prior[i] = (point_deviation * cluster_deviation[l]) / cluster_size[l]
-
-        # scale the prior using the squashing function
-        gamma = np.sort(prior)[int(n * (1.0 - self.c))] + self.tol
-        prior = np.array([1 - self._squashing_function(x, gamma) for x in prior])
+                point_deviation = distances[i] / self.max_intra_cluster[l]
+            prior[i] = (point_deviation * self.cluster_deviation[l]) / self.cluster_sizes[l]
 
         return prior
 
-    def _compute_posterior(self, X, y, prior, eta):
+    def _compute_posterior(self, X, prior, eta):
         """ Update the clustering score with label propagation.
 
         :returns posterior : np.array(), shape (n_samples)
@@ -194,56 +250,26 @@ class SSDO(BaseDetector):
         """
 
         n, _ = X.shape
-        ix_a = np.where(y == 1)[0]
-        ix_n = np.where(y == -1)[0]
-        if len(ix_a) + len(ix_n) > 0:
-            labels = True
-        else:
-            labels = False
+
+        # labeled examples
+        ixa = np.where(self._labels == 1.0)[0]
+        ixn = np.where(self._labels == -1.0)[0]
 
         # compute limited distance matrices (to normals, to anomalies)
-        if labels:
-            Dnorm = fast_distance_matrix(X, X[ix_n, :])
-            Danom = fast_distance_matrix(X, X[ix_a, :])
+        Dnorm = fast_distance_matrix(X, self._X_labels[ixn, :])
+        Danom = fast_distance_matrix(X, self._X_labels[ixa, :])
 
         # compute posterior
-        if labels:
-            posterior = np.zeros(n)
-            for i in range(n):
-                # weighted distance to anomalies & normals
-                da = np.sum(self._squashing_function(Danom[i, :], eta))
-                dn = np.sum(self._squashing_function(Dnorm[i, :], eta))
-                # posterior
-                z = 1.0 / (1.0 + self.alpha * (da + dn))
-                posterior[i] = z * (prior[i] + self.alpha * da)
-        else:
-            posterior = prior
+        posterior = np.zeros(n)
+        for i in range(n):
+            # weighted distance to anomalies & normals
+            da = np.sum(self._squashing_function(Danom[i, :], eta))
+            dn = np.sum(self._squashing_function(Dnorm[i, :], eta))
+            # posterior
+            z = 1.0 / (1.0 + self.alpha * (da + dn))
+            posterior[i] = z * (prior[i] + self.alpha * da)
 
         return posterior
-
-    def _constrained_clustering(self, X, y):
-        """ Constrained clustering of X with labels y.
-
-        :returns labels : np.array(), shape (n_samples)
-            Cluster labels of the instances in X [0 ... nc-1].
-        :returns centroids : np.array(), shape (n_clusters, n_features)
-            Cluster centroids.
-        """
-
-        # construct cannot-link constraints + remove impossible cannot-links
-        ix_n = np.where(y == -1)[0]
-        ix_a = np.where(y == 1)[0]
-        cl = np.array(np.meshgrid(ix_a, ix_n)).T.reshape(-1,2)
-
-        # cluster
-        clus = COPKMeans(n_clusters=self.nc)
-        clus.fit(X, cannot_link=cl)
-
-        # update self.nc
-        self.nc = clus.n_clusters
-        labels, centroids = clus.labels_, clus.cluster_centers_
-
-        return labels, centroids
 
     def _compute_eta(self, X):
         """ Compute the eta parameter.

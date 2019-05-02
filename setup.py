@@ -16,7 +16,7 @@ config = {
     'url': 'https://github.com/Vincent-Vercruyssen/anomatools',
     'author': 'Vincent Vercruyssen',
     'author_email': 'V.Vercruyssen@gmail.com',
-    'version': '2018.01',
+    'version': '2018.02',
     'install_requires': ['numpy',
                          'scipy',
                          'matplotlib',
