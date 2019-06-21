@@ -14,6 +14,7 @@ import numpy as np
 
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.neighbors import DistanceMetric
+from sklearn.neighbors import BallTree
 
 from .BaseDetector import BaseDetector
 from ..utils.validation import check_X_y
@@ -100,19 +101,14 @@ class iNNe(BaseDetector):
         self.n = min(self.n, n)
 
         # construct the ensembles with random sampling of the points
-        self.ensemble = []
+        self._ensemble = []
         for _ in range(self.t):
-            # 1. randomly sample a number of points
-            sample_ix = np.random.choice(n, self.n, replace=False)
-            subsample = X[sample_ix, :]
-
-            # 2. construct the set of hyperspheres (single member of the ensemble)
-            member = hyperSpheres(self.n, metric=self.metric)
-            member.construct_hyperspheres(sample_ix, subsample)
-
-            # 3. add to the ensemble
-            self.ensemble.append(member)
-
+            # random sample
+            ixs = np.random.choice(n, self.n, replace=False)
+            
+            sphere = hyperSphere(X[ixs, :])
+            self._ensemble.append(sphere)
+        
         return self
 
     def predict(self, X):
@@ -128,95 +124,59 @@ class iNNe(BaseDetector):
         n, _ = X.shape
 
         # compute the anomaly score using each member of the ensemble
-        y_score = np.zeros(n, dtype=float)
-        for i, member in enumerate(self.ensemble):
-            i_scores = member.compute_isolation_scores(X)
-            y_score += i_scores
-        i_scores = i_scores / self.t
+        iscores = np.zeros(n, dtype=float)
+        for sphere in self._ensemble:
+            score = sphere.compute_isolation_score(sphere, X)
+            iscores = iscores + score
+        iscores = iscores / self.t
 
-        y_score = (i_scores - min(i_scores)) / (max(i_scores) - min(i_scores))
-
-        # prediction threshold + absolute predictions
-        self.threshold = np.sort(y_score)[int(n * (1.0 - self.contamination))]
+        # prediction labels
+        self.threshold = np.sort(iscores)[int(n * (1.0 - self.contamination))]
         y_pred = np.ones(n, dtype=float)
-        y_pred[y_score < self.threshold] = -1
+        y_pred[iscores < self.threshold] = -1
 
-        return y_score, y_pred
-
+        return iscores, y_pred
 
 
 # -------------
 # SINGLE MEMBER
 # -------------
 
-class hyperSpheres:
-    """ Single member of the ensemble """
-
-    def __init__(self, n, metric):
-
-        self.metric = metric  # this metric has a function to compute the distance
-        self.spheres = np.zeros((3, n), dtype=float)
-
-    def construct_hyperspheres(self, sample_ix, subsample):
-        """ Construct the hyperspheres. """
-
-        # 1. compute pairwise distance matrix
-        Dmat = self.metric.pairwise(subsample)
-        np.fill_diagonal(Dmat, np.inf)  # a point cannot find itself as the nearest neighbor
-
-        # 2. find nearest neighbor and distance to nearest neighbor
-        nn_dist = np.min(Dmat, axis=0)
-        nn_ix = np.argmin(Dmat, axis=0)
-
-        # 3. compute isolation score of each hypersphere
-        scores = 1.0 - (nn_dist[nn_ix] / nn_dist)
-        scores = np.nan_to_num(scores)
-
-        # 4. store info
-        self.spheres[0, :] = sample_ix      # index of the center
-        self.spheres[1, :] = nn_dist        # hypersphere radius
-        self.spheres[2, :] = scores         # isolation scores
-
-        return self
-
-    def compute_isolation_scores(self, data):
-        """ Compute the isolation score for each point in the data. """
-
-        n = len(data)
-        i_scores = np.zeros(n, dtype=float)
-
-        # 1. find the center points of the hyperspheres
-        ix_c = self.spheres[0, :].astype(int)
-        centers = data[ix_c, :]
-
-        # 2. compute the scores using chunks (to reduce memory usage)
-        i = 0
-        chunk_size = 1000
-        end_reached = False
-        while not end_reached:
-            # select the data chunk
-            data_chunk = data[i:i+chunk_size, :]
-
-            # compute the distance matrix
-            Dmat = self.metric.pairwise(data_chunk, centers)
-
-            # find the closest center and check if x in hypersphere
-            nn_dist = np.min(Dmat, axis=1)
-            nn_ix = np.argmin(Dmat, axis=1)
-            radii = self.spheres[1, nn_ix]
-            scores = self.spheres[2, nn_ix]
-
-            # fill in the score vector
-            for j in range(len(data_chunk)):
-                if nn_dist[j] < radii[j]:
-                    i_scores[i+j] = scores[j]
-                else:
-                    i_scores[i+j] = 1.0
-
-            # stopping criterion + increasing index with chunksize
-            i += chunk_size
-            if i > n:
-                end_reached = True
-                break
-
-        return i_scores
+class hyperSphere:
+    
+    def __init__(self, X):
+        # constructs hypersphere
+        self.nm = X.shape[0]
+        self.nn_tree = BallTree(X, leaf_size=16, metric='euclidean')
+        nn_dists, nn_ixs = self.nn_tree.query(X, k=2)
+        
+        # radii
+        eps = 1e-8
+        self.radii = nn_dists[:, 1].flatten() + eps
+        
+        # isolation scores
+        self.scores = 1.0 - (self.radii[nn_ixs[:, 1].flatten()] / self.radii)
+    
+    def compute_isolation_score(self, sphere, X):
+        # compute isolation score for sample X
+        n, _ = X.shape
+        scores = np.ones(n, dtype=np.float)
+        
+        s_dists, s_ixs = sphere.nn_tree.query(X, k=self.nm)
+        
+        for i in range(n):
+            cr = self.radii[s_ixs[i, :].flatten()]
+            
+            # belongs to these spheres
+            ix_m = np.where(s_dists[i, :].flatten() <= cr)[0]
+            
+            # does not belong to sphere
+            if len(ix_m) == 0:
+                continue
+            
+            # sphere with smallest radius
+            ixs = np.argmin(cr[ix_m])
+            ns = s_ixs[i, ixs]
+            scores[i] = self.scores[ns]
+            
+        return scores
