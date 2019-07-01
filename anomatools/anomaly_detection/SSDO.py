@@ -147,7 +147,9 @@ class SSDO(BaseDetector):
             prior = self._compute_prior(X)
             # already normalized between 0 and 1
         elif self.base_classifier == 'other':
-            prior = self.prior_detector.predict(X)
+            print('WARNING: SSDO expects two outputs from the predict() function of the classifier: \
+                    1) the y_prob, and 2) the y_pred. It will use the y_prob as the prior.')
+            prior, _ = self.prior_detector.predict(X)
             prior = (prior - min(prior)) / (max(prior) - min(prior))
         elif self.base_classifier == 'IF':
             prior = self.prior_detector.decision_function(X) * -1
