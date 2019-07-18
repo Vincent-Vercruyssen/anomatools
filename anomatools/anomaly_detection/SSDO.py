@@ -8,6 +8,7 @@ import scipy.stats as sps
 from collections import Counter
 from scipy.spatial import cKDTree
 from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import LocalOutlierFactor
 
 from .BaseDetector import BaseDetector
 from ..clustering.COPKMeans import COPKMeans
@@ -39,18 +40,28 @@ class SSDO(BaseDetector):
         Unsupervised baseline classifier:
             'ssdo'    --> SSDO baseline (based on constrained k-means clustering)
             'IF'      --> IsolationForest as the base classifier
+            'LOF'     --> Local Outlier Factor as the base classifier
             'other'   --> use a different classifier passed to SSDO
     """
 
-    def __init__(self, n_clusters=10, alpha=2.3, k=30, contamination=0.1, base_classifier='ssdo',
-                 tol=1e-8, verbose=False):
+    def __init__(self,
+            n_clusters=10,                      # number of clusters for the SSDO base classifier
+            alpha=2.3,                          # the alpha parameter for SSDO label propagation
+            k=30,                               # the k parameter for SSDO label propagation
+            contamination=0.1,                  # expected number of anomalies in the data
+            base_classifier='ssdo',             # type of base classifier to use
+            base_classifier_parameters={},      # parameters for the base classifier if applicable
+            tol=1e-8,                           # tolerance level
+            verbose=False):
         super(BaseDetector, self).__init__()
 
+        # instantiate the parameters
         self.nc = int(n_clusters)
         self.alpha = float(alpha)
         self.k = int(k)
         self.c = float(contamination)
         self.base_classifier = str(base_classifier)
+        self.base_classifier_parameters = base_classifier_parameters
         self.tol = tol
         self.verbose = bool(verbose)
 
@@ -82,6 +93,8 @@ class SSDO(BaseDetector):
             Labels for examples in X.
         :param base_classifier : object
             Base classifier to detect the anomalies if SSDO is not used.
+        :param base_classifier_parameters : dictionary
+
 
         :returns self : object
         """
@@ -106,6 +119,10 @@ class SSDO(BaseDetector):
             if not has_pre:
                 raise Exception('ERROR: `base_classifier` has no predict() function')
             self.prior_detector = base_classifier
+            self.prior_detector.fit(X)
+        elif self.base_classifier == 'LOF':
+            # use Local Oultier Factor
+            self.prior_detector = LocalOutlierFactor(**self.base_classifier_parameters, novelty=True)
             self.prior_detector.fit(X)
         elif self.base_classifier == 'IF':
             # use Isolation Forest
@@ -150,6 +167,11 @@ class SSDO(BaseDetector):
             print('WARNING: SSDO expects two outputs from the predict() function of the classifier: \
                     1) the y_prob, and 2) the y_pred. It will use the y_prob as the prior.')
             prior, _ = self.prior_detector.predict(X)
+            prior = (prior - min(prior)) / (max(prior) - min(prior))
+        elif self.base_classifier == 'LOF':
+            # inverse of the scores: higher is more anomalous
+            prior = self.prior_detector.score_samples(X) * -1
+            # rescale between 0 and 1
             prior = (prior - min(prior)) / (max(prior) - min(prior))
         elif self.base_classifier == 'IF':
             prior = self.prior_detector.decision_function(X) * -1
