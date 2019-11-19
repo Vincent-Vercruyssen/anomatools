@@ -16,7 +16,7 @@ config = {
     'url': 'https://github.com/Vincent-Vercruyssen/anomatools',
     'author': 'Vincent Vercruyssen',
     'author_email': 'V.Vercruyssen@gmail.com',
-    'version': '2018.02',
+    'version': '2.0',
     'install_requires': ['numpy',
                          'scipy',
                          'matplotlib',
@@ -26,7 +26,7 @@ config = {
     'keywords': 'anomaly detection',
     'include_package_data': True,
     'classifiers':['Intended Audience :: Science/Research',
-                   'License :: OSI Approved :: MIT License',
+                   'License :: OSI Approved :: Apache Software License',
                    'Topic :: Scientific/Engineering :: Artificial Intelligence',
                    'Programming Language :: Python :: 3']
 }

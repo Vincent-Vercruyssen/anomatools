@@ -1,32 +1,36 @@
-""" iNNe based anomaly detection.
+# -*- coding: UTF-8 -*-
+"""
+
+Isolation nearest neighbor ensembles.
 
 Reference:
     T. R. Bandaragoda, K. Ming Ting, D. Albrecht, F. T. Liu, Y. Zhu, and J. R. Wells.
     Isolation-based anomaly detection using nearest-neighbor ensembles.
     In Computational Intelligence, vol. 34, 2018, pp. 968-998.
 
-"""
+:author: Vincent Vercruyssen
+:year: 2018
+:license: Apache License, Version 2.0, see LICENSE for details.
 
-# Authors: Vincent Vercruyssen, 2018.
+"""
 
 import math
 import numpy as np
 
+from sklearn.utils.validation import check_X_y
+from sklearn.base import BaseEstimator
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.neighbors import DistanceMetric
 from sklearn.neighbors import BallTree
 
-from .BaseDetector import BaseDetector
-from ..utils.validation import check_X_y
 
 
-# -------------
-# MAIN CLASS
-# -------------
+# ----------------------------------------------------------------------------
+# INNE class
+# ----------------------------------------------------------------------------
 
-class iNNe(BaseDetector):
-    """ Isolation-based nearest neighbor ensemble.
-
+class INNE(BaseEstimator):
+    """
     Parameters
     ----------
     t : int (default=100)
@@ -47,9 +51,14 @@ class iNNe(BaseDetector):
     the data: automatically correct if necessary.
     """
 
-    def __init__(self, t=100, n=16, contamination=0.1, metric='euclidean',
-                 tol=1e-8, verbose=False):
-        super(iNNe, self).__init__()
+    def __init__(self,
+                 t=100,
+                 n=16,
+                 contamination=0.1,
+                 metric='euclidean',
+                 tol=1e-8,
+                 verbose=False):
+        super().__init__()
 
         self.t = int(t)
         self.n = int(n)
@@ -61,7 +70,7 @@ class iNNe(BaseDetector):
                 self.metric = DistanceMetric.get_metric(metric)
             except ValueError as e:
                 raise BaseException(e)
-
+        
         self.tol = float(tol)
         self.verbose = bool(verbose)
 
@@ -79,7 +88,9 @@ class iNNe(BaseDetector):
         :returns y_pred : np.array(), shape (n_samples)
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
-
+        
+        if y is None:
+            y = np.zeros(len(X))
         X, y = check_X_y(X, y)
 
         return self.fit(X, y).predict(X)
@@ -95,9 +106,12 @@ class iNNe(BaseDetector):
         :returns self : object
         """
 
+        if y is None:
+            y = np.zeros(len(X))
         X, y = check_X_y(X, y)
         n, _ = X.shape
 
+        # set value for n
         self.n = min(self.n, n)
 
         # construct the ensembles with random sampling of the points
@@ -120,7 +134,7 @@ class iNNe(BaseDetector):
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
 
-        X, y = check_X_y(X, None)
+        X, y = check_X_y(X, np.zeros(len(X)))
         n, _ = X.shape
 
         # compute the anomaly score using each member of the ensemble
@@ -138,9 +152,9 @@ class iNNe(BaseDetector):
         return iscores, y_pred
 
 
-# -------------
-# SINGLE MEMBER
-# -------------
+# ----------------------------------------------------------------------------
+# single member of the INNE ensemble
+# ----------------------------------------------------------------------------
 
 class hyperSphere:
     

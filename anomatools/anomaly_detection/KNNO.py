@@ -1,30 +1,33 @@
-""" kNN based anomaly detection.
+# -*- coding: UTF-8 -*-
+"""
+
+k-nearest neighbor anomaly detection.
 
 Reference:
     S. Ramaswamy, R. Rastogi, and K. Shim. Efficient algorithms for mining outliers from large data sets.
     In Proceedings of the 2000 ACM SIGMOD international conference on Management of data, vol. 29, no. 2. ACM, 2000, pp. 427–438.
 
-"""
+:author: Vincent Vercruyssen
+:year: 2018
+:license: Apache License, Version 2.0, see LICENSE for details.
 
-# Authors: Vincent Vercruyssen, 2018.
+"""
 
 import math
 import numpy as np
 
+from sklearn.utils.validation import check_X_y
+from sklearn.base import BaseEstimator
 from sklearn.neighbors import BallTree
 from sklearn.metrics.pairwise import cosine_similarity
 
-from .BaseDetector import BaseDetector
-from ..utils.validation import check_X_y
 
+# ----------------------------------------------------------------------------
+# KNNO class
+# ----------------------------------------------------------------------------
 
-# -------------
-# CLASSES
-# -------------
-
-class kNNo(BaseDetector):
-    """ k-nearest neighbors outlier detection (kNNo)
-
+class KNNO(BaseEstimator):
+    """
     Parameters
     ----------
     k : int (default=10)
@@ -44,9 +47,13 @@ class kNNo(BaseDetector):
     the data: automatically correct if necessary.
     """
 
-    def __init__(self, k=10, contamination=0.1, metric='euclidean',
-                 tol=1e-8, verbose=False):
-        super(kNNo, self).__init__()
+    def __init__(self,
+                 k=10,
+                 contamination=0.1,
+                 metric='euclidean',
+                 tol=1e-8,
+                 verbose=False):
+        super().__init__()
 
         self.k = int(k)
         self.contamination = float(contamination)
@@ -71,7 +78,8 @@ class kNNo(BaseDetector):
         :returns y_pred : np.array(), shape (n_samples)
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
-
+        if y is None:
+            y = np.zeros(len(X))
         X, y = check_X_y(X, y)
 
         return self.fit(X, y).predict(X)
@@ -87,6 +95,8 @@ class kNNo(BaseDetector):
         :returns self : object
         """
 
+        if y is None:
+            y = np.zeros(len(X))
         X, y = check_X_y(X, y)
         n, _ = X.shape
 
@@ -114,7 +124,7 @@ class kNNo(BaseDetector):
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
 
-        X, y = check_X_y(X, None)
+        X, y = check_X_y(X, np.zeros(len(X)))
         n, _ = X.shape
 
         # compute the outlier score

@@ -16,7 +16,7 @@ from ..utils.fastfuncs import fast_distance_matrix
 from ..utils.validation import check_X_y
 
 
-class SSDO(BaseDetector):
+class Ssdo(BaseDetector):
     """ Semi-Supervised Detection of Anomalies (SSDO)
 
     Parameters
@@ -45,9 +45,9 @@ class SSDO(BaseDetector):
     """
 
     def __init__(self,
-            n_clusters=10,                      # number of clusters for the SSDO base classifier
-            alpha=2.3,                          # the alpha parameter for SSDO label propagation
-            k=30,                               # the k parameter for SSDO label propagation
+            n_clusters=10,                      # number of clusters for the ssdo base classifier
+            alpha=2.3,                          # the alpha parameter for ssdo label propagation
+            k=30,                               # the k parameter for ssdo label propagation
             contamination=0.1,                  # expected number of anomalies in the data
             base_classifier='ssdo',             # type of base classifier to use
             base_classifier_parameters={},      # parameters for the base classifier if applicable
@@ -92,7 +92,7 @@ class SSDO(BaseDetector):
         :param y : np.array(), shape (n_samples), default = None
             Labels for examples in X.
         :param base_classifier : object
-            Base classifier to detect the anomalies if SSDO is not used.
+            Base classifier to detect the anomalies if ssdo is not used.
         :param base_classifier_parameters : dictionary
 
 

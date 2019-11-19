@@ -1,6 +1,13 @@
-""" Functions allowing fast computations """
+# -*- coding: UTF-8 -*-
+"""
 
-# Authors: Vincent Vercruyssen
+Functions for fast distance computations.
+
+:author: Vincent Vercruyssen
+:year: 2018
+:license: Apache License, Version 2.0, see LICENSE for details.
+
+"""
 
 import numpy as np
 
