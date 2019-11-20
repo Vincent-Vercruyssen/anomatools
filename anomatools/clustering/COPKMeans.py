@@ -3,17 +3,50 @@
 # Authors: Vincent Vercruyssen
 
 import math
-import numpy as np
 import random
+import numpy as np
 
-from ..utils.fastfuncs import fast_distance_matrix
+from sklearn.utils.validation import check_X_y
+from sklearn.base import BaseEstimator
+
+from anomatools.utils.fastfuncs import fast_distance_matrix
 
 
-class COPKMeans:
-    """ Constrained k-means clustering """
+# ----------------------------------------------------------------------------
+# COPKMeans
+# ----------------------------------------------------------------------------
 
-    def __init__(self, n_clusters=10, init='kmpp', n_init=3, max_iter=300, chunk_size=2000):
+class COPKMeans(BaseEstimator):
+    """
+    Parameters
+    ----------
+    n_clusters : int (default=10)
+        Number of clusters used for the COP k-means clustering algorithm.
 
+    init : str (default='kmpp')
+        Initialization method for the cluster centra.
+
+    n_init : int (default=3)
+        Number of initializations.
+    
+    max_iter : int (default=300)
+        Maximum iterations for the algorithm.
+
+    chunk_size : int (default=2000)
+        Size of each chunck to recompute the cluster centra.
+    """
+
+    def __init__(self,
+                 n_clusters=10,
+                 init='kmpp',
+                 n_init=3,
+                 max_iter=300,
+                 chunk_size=2000,
+                 tol=1e-10,
+                 verbose=False):
+        super().__init__()
+
+        # initialize parameters
         self.k = n_clusters
         self.init = init
         self.n_init = n_init

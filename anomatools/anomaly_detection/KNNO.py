@@ -48,19 +48,19 @@ class KNNO(BaseEstimator):
     """
 
     def __init__(self,
-                 k=10,
-                 contamination=0.1,
-                 metric='euclidean',
-                 tol=1e-8,
+                 k=10,                      # the number of neighbors
+                 contamination=0.1,         # expected proportion of anomalies in the data
+                 metric='euclidean',        # distance metric used
+                 tol=1e-8,                  # tolerance
                  verbose=False):
         super().__init__()
 
+        # instantiate parameters
         self.k = int(k)
         self.contamination = float(contamination)
         if metric not in BallTree.valid_metrics + ['cosine']:
             raise BaseException('Invalid distance metric!')
         self.metric = str(metric)
-
         self.tol = float(tol)
         self.verbose = bool(verbose)
 
@@ -78,9 +78,6 @@ class KNNO(BaseEstimator):
         :returns y_pred : np.array(), shape (n_samples)
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
-        if y is None:
-            y = np.zeros(len(X))
-        X, y = check_X_y(X, y)
 
         return self.fit(X, y).predict(X)
 
@@ -95,9 +92,11 @@ class KNNO(BaseEstimator):
         :returns self : object
         """
 
+        # check input
         if y is None:
             y = np.zeros(len(X))
         X, y = check_X_y(X, y)
+        
         n, _ = X.shape
 
         self.nn = self._check_valid_number_of_neighbors(n)
@@ -124,16 +123,18 @@ class KNNO(BaseEstimator):
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
 
-        X, y = check_X_y(X, np.zeros(len(X)))
+        # check input
+        X, _ = check_X_y(X, np.zeros(len(X)))
+
         n, _ = X.shape
 
         # compute the outlier score
         knn_score = np.zeros(n, dtype=float)
         for i, x in enumerate(X):
-            # TODO: fix the number of neighbors when fitting and predicting simultaneously
-            dist, _ = self.tree.query([x], k=max(2, self.nn))    # TODO: quite slow for larger data sets
+            dist, _ = self.tree.query([x], k=max(2, self.nn))
             knn_score[i] = dist.flatten()[-1]
 
+        # normalize the score between 0 and 1
         y_score = (knn_score - min(knn_score)) / (max(knn_score) - min(knn_score))
 
         # prediction threshold + absolute predictions

@@ -12,6 +12,10 @@ Functions for fast distance computations.
 import numpy as np
 
 
+# ----------------------------------------------------------------------------
+# functions
+# ----------------------------------------------------------------------------
+
 def fast_distance_matrix(X, Y):
     """ Compute distance matrix between instances in sets X and Y
 

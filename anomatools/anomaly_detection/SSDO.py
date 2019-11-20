@@ -1,24 +1,39 @@
-""" Semi-Supervised Detection of Anomalies """
+# -*- coding: UTF-8 -*-
+"""
 
-# Authors: Vincent Vercruyssen
+Semi-Supervised Detection of Anomalies
+
+Reference:
+    V. Vercruyssen, W. Meert, G. Verbruggen, K. Maes, R. Baumer, J. Davis.
+    Semi-supervised anomaly detection with an application to water analytics.
+    In IEEE International Conference on Data Mining, Singapore, 2018, pp. 527–536.
+
+:author: Vincent Vercruyssen
+:year: 2018
+:license: Apache License, Version 2.0, see LICENSE for details.
+
+"""
 
 import numpy as np
 import scipy.stats as sps
 
 from collections import Counter
 from scipy.spatial import cKDTree
+from sklearn.utils.validation import check_X_y
+from sklearn.base import BaseEstimator
 from sklearn.ensemble import IsolationForest
 from sklearn.neighbors import LocalOutlierFactor
 
-from .BaseDetector import BaseDetector
-from ..clustering.COPKMeans import COPKMeans
-from ..utils.fastfuncs import fast_distance_matrix
-from ..utils.validation import check_X_y
+from anomatools.clustering.COPKMeans import COPKMeans
+from anomatools.utils.fastfuncs import fast_distance_matrix
 
 
-class Ssdo(BaseDetector):
-    """ Semi-Supervised Detection of Anomalies (SSDO)
+# ----------------------------------------------------------------------------
+# SSDO class
+# ----------------------------------------------------------------------------
 
+class SSDO(BaseEstimator):
+    """
     Parameters
     ----------
     n_clusters : int (default=10)
@@ -36,36 +51,32 @@ class Ssdo(BaseDetector):
     contamination : float (default=0.1)
         Estimate of the expected percentage of anomalies in the data.
 
-    base_classifier : str (default='ssdo')
+    unsupervised_prior : str (default='SSDO')
         Unsupervised baseline classifier:
-            'ssdo'    --> SSDO baseline (based on constrained k-means clustering)
-            'IF'      --> IsolationForest as the base classifier
-            'LOF'     --> Local Outlier Factor as the base classifier
-            'other'   --> use a different classifier passed to SSDO
+            'SSDO'    --> SSDO baseline (based on constrained k-means clustering)
+            'other'   --> use a different prior passed to SSDO
     """
 
     def __init__(self,
-            n_clusters=10,                      # number of clusters for the ssdo base classifier
-            alpha=2.3,                          # the alpha parameter for ssdo label propagation
-            k=30,                               # the k parameter for ssdo label propagation
-            contamination=0.1,                  # expected number of anomalies in the data
-            base_classifier='ssdo',             # type of base classifier to use
-            base_classifier_parameters={},      # parameters for the base classifier if applicable
-            tol=1e-8,                           # tolerance level
-            verbose=False):
-        super(BaseDetector, self).__init__()
+                 n_clusters=10,                      # number of clusters for the ssdo base classifier
+                 alpha=2.3,                          # the alpha parameter for ssdo label propagation
+                 k=30,                               # the k parameter for ssdo label propagation
+                 contamination=0.1,                  # expected proportion of anomalies in the data
+                 unsupervised_prior='SSDO',          # type of base classifier to use
+                 tol=1e-8,                           # tolerance
+                 verbose=False):
+        super().__init__()
 
         # instantiate the parameters
         self.nc = int(n_clusters)
         self.alpha = float(alpha)
         self.k = int(k)
         self.c = float(contamination)
-        self.base_classifier = str(base_classifier)
-        self.base_classifier_parameters = base_classifier_parameters
-        self.tol = tol
+        self.unsupervised_prior = str(unsupervised_prior).lower()
+        self.tol = float(tol)
         self.verbose = bool(verbose)
 
-    def fit_predict(self, X, y=None, base_classifier=None):
+    def fit_predict(self, X, y=None, prior=None):
         """ Fit the model to the training set X and returns the anomaly score
             of the instances in X.
 
@@ -73,8 +84,8 @@ class Ssdo(BaseDetector):
             The samples to compute anomaly score w.r.t. the training samples.
         :param y : np.array(), shape (n_samples), default = None
             Labels for examples in X.
-        :param base_classifier : object
-            Base classifier to detect the anomalies if SSDO is not used.
+        :param prior : np.array(), shape (n_samples)
+            Unsupervised prior to detect the anomalies if SSDO is not used.
 
         :returns y_score : np.array(), shape (n_samples)
             Anomaly score for the examples in X.
@@ -82,54 +93,33 @@ class Ssdo(BaseDetector):
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
 
-        return self.fit(X, y, base_classifier).predict(X)
+        # unsupervised prior not necessary during training
+        return self.fit(X, y).predict(X, prior=prior)
 
-    def fit(self, X, y=None, base_classifier=None):
+    def fit(self, X, y=None):
         """ Fit the model using data in X.
 
         :param X : np.array(), shape (n_samples, n_features)
             The samples to compute anomaly score w.r.t. the training samples.
         :param y : np.array(), shape (n_samples), default = None
             Labels for examples in X.
-        :param base_classifier : object
-            Base classifier to detect the anomalies if ssdo is not used.
-        :param base_classifier_parameters : dictionary
-
 
         :returns self : object
         """
 
-        X, y = check_X_y(X, y)
-        n, _ = X.shape
+        # check input
         if y is None:
-            y = np.zeros(n, dtype=int)
+            y = np.zeros(len(X))
+        X, y = check_X_y(X, y)
 
-        # compute the prior using different base classifiers
-        if self.base_classifier == 'ssdo':
+        # compute the prior
+        if self.unsupervised_prior == 'ssdo':
             # COPKMeans classifier
             self._fit_prior_parameters(X, y)
-        elif self.base_classifier == 'other':
-            # check the validity of the classifier
-            if not isinstance(base_classifier, object):
-                raise ValueError('ERROR: `base_classifier` should be an object with a fit() and predict()')
-            has_fit = callable(getattr(base_classifier, 'fit', None))
-            has_pre = callable(getattr(base_classifier, 'predict', None))
-            if not has_fit:
-                raise Exception('ERROR: `base_classifier` has not fit() function')
-            if not has_pre:
-                raise Exception('ERROR: `base_classifier` has no predict() function')
-            self.prior_detector = base_classifier
-            self.prior_detector.fit(X)
-        elif self.base_classifier == 'LOF':
-            # use Local Oultier Factor
-            self.prior_detector = LocalOutlierFactor(**self.base_classifier_parameters, novelty=True)
-            self.prior_detector.fit(X)
-        elif self.base_classifier == 'IF':
-            # use Isolation Forest
-            self.prior_detector = IsolationForest(n_estimators=500, max_samples='auto')
-            self.prior_detector.fit(X)
+        elif self.unsupervised_prior == 'other':
+            pass
         else:
-            raise ValueError('ERROR: invalid choice of `base_classifier` (`ssdo`, `IF`, or `other`)')
+            raise ValueError('INPUT ERROR: `unsupervised_prior` unknown!')
 
         # compute eta parameter
         self.eta = self._compute_eta(X)
@@ -144,11 +134,13 @@ class Ssdo(BaseDetector):
 
         return self
 
-    def predict(self, X):
+    def predict(self, X, prior=None):
         """ Compute the anomaly score for unseen instances.
 
         :param X : np.array(), shape (n_samples, n_features)
             The samples in the test set for which to compute the anomaly score.
+        :param prior : np.array(), shape (n_samples)
+            Unsupervised prior to detect the anomalies if SSDO is not used.
 
         :returns y_score : np.array(), shape (n_samples)
             Anomaly score for the examples in X.
@@ -156,30 +148,20 @@ class Ssdo(BaseDetector):
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
 
-        X, _ = check_X_y(X, None)
+        # check input
+        X, _ = check_X_y(X, np.zeros(len(X)))
+
         n, _ = X.shape
 
         # compute the prior
-        if self.base_classifier == 'ssdo':
-            prior = self._compute_prior(X)
-            # already normalized between 0 and 1
-        elif self.base_classifier == 'other':
-            print('WARNING: SSDO expects two outputs from the predict() function of the classifier: \
-                    1) the y_prob, and 2) the y_pred. It will use the y_prob as the prior.')
-            prior, _ = self.prior_detector.predict(X)
-            prior = (prior - min(prior)) / (max(prior) - min(prior))
-        elif self.base_classifier == 'LOF':
-            # inverse of the scores: higher is more anomalous
-            prior = self.prior_detector.score_samples(X) * -1
-            # rescale between 0 and 1
-            prior = (prior - min(prior)) / (max(prior) - min(prior))
-        elif self.base_classifier == 'IF':
-            prior = self.prior_detector.decision_function(X) * -1
-            prior = (prior - min(prior)) / (max(prior) - min(prior))
+        if self.unsupervised_prior == 'ssdo':
+            prior = self._compute_prior(X)      # in [0, 1]
+        elif self.unsupervised_prior == 'other':
+            prior = prior.copy()
         else:
-            print('WARNING: no `base_classifier` for predict()')
+            print('WARNING: no unsupervised `prior` for predict()!')
             prior = np.ones(n, dtype=np.float)
-
+        
         # scale the prior using the squashing function
         # TODO: this is the expected contamination in the test set!
         gamma = np.sort(prior)[int(n * (1.0 - self.c))] + self.tol

@@ -52,14 +52,15 @@ class INNE(BaseEstimator):
     """
 
     def __init__(self,
-                 t=100,
-                 n=16,
-                 contamination=0.1,
-                 metric='euclidean',
-                 tol=1e-8,
+                 t=100,                     # number of ensemble members
+                 n=16,                      # sample for each ensemble member
+                 contamination=0.1,         # expected proportion of anomalies in the data
+                 metric='euclidean',        # distance metric to use
+                 tol=1e-8,                  # tolerance
                  verbose=False):
         super().__init__()
 
+        # instantiate the parameters
         self.t = int(t)
         self.n = int(n)
         self.contamination = float(contamination)
@@ -70,7 +71,6 @@ class INNE(BaseEstimator):
                 self.metric = DistanceMetric.get_metric(metric)
             except ValueError as e:
                 raise BaseException(e)
-        
         self.tol = float(tol)
         self.verbose = bool(verbose)
 
@@ -88,10 +88,6 @@ class INNE(BaseEstimator):
         :returns y_pred : np.array(), shape (n_samples)
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
-        
-        if y is None:
-            y = np.zeros(len(X))
-        X, y = check_X_y(X, y)
 
         return self.fit(X, y).predict(X)
 
@@ -106,9 +102,11 @@ class INNE(BaseEstimator):
         :returns self : object
         """
 
+        # check input
         if y is None:
             y = np.zeros(len(X))
         X, y = check_X_y(X, y)
+
         n, _ = X.shape
 
         # set value for n
@@ -134,7 +132,8 @@ class INNE(BaseEstimator):
             Returns -1 for inliers and +1 for anomalies/outliers.
         """
 
-        X, y = check_X_y(X, np.zeros(len(X)))
+        # check input
+        X, _ = check_X_y(X, np.zeros(len(X)))
         n, _ = X.shape
 
         # compute the anomaly score using each member of the ensemble
@@ -165,7 +164,7 @@ class hyperSphere:
         nn_dists, nn_ixs = self.nn_tree.query(X, k=2)
         
         # radii
-        eps = 1e-8
+        eps = 1e-10
         self.radii = nn_dists[:, 1].flatten() + eps
         
         # isolation scores
