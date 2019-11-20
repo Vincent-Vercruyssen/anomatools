@@ -7,7 +7,7 @@ def readme():
     with open('README.md') as f:
         return f.read()
 
-description = 'Toolbox for anomaly detection.'
+description = 'Compact toolbox for anomaly detection.'
 
 config = {
     'name': 'anomatools',
@@ -19,7 +19,6 @@ config = {
     'version': '2.0',
     'install_requires': ['numpy',
                          'scipy',
-                         'matplotlib',
                          'scikit-learn'],
     'packages': find_packages(),
     'package_dir' : {'anomatools': 'anomatools'},

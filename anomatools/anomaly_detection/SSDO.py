@@ -157,7 +157,7 @@ class SSDO(BaseEstimator):
         if self.unsupervised_prior == 'ssdo':
             prior = self._compute_prior(X)      # in [0, 1]
         elif self.unsupervised_prior == 'other':
-            prior = prior.copy()
+            prior = (prior - min(prior)) / (max(prior) - min(prior))
         else:
             print('WARNING: no unsupervised `prior` for predict()!')
             prior = np.ones(n, dtype=np.float)
