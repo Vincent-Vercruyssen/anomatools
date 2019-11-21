@@ -3,32 +3,50 @@ try:
 except ImportError:
     from distutils.core import setup
 
+import os
+
+# get __version__ from _version.py
+ver_file = os.path.join('anomatools', 'version.py')
+with open(ver_file) as f:
+    exec(f.read())
+
+this_directory = os.path.abspath(os.path.dirname(__file__))
+
+# read the contents of README.md
 def readme():
-    with open('README.md') as f:
+    with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
         return f.read()
 
-description = 'Compact toolbox for anomaly detection.'
+# read the contents of requirements.txt
+with open(os.path.join(this_directory, 'requirements.txt'),
+          encoding='utf-8') as f:
+    requirements = f.read().splitlines()
 
+# setup configuration
 config = {
     'name': 'anomatools',
-    'description': description,
+    'description':'A compact Python toolbox for anomaly detection.',
     'long_description': readme(),
     'long_description_content_type': 'text/markdown',
     'url': 'https://github.com/Vincent-Vercruyssen/anomatools',
     'author': 'Vincent Vercruyssen',
     'author_email': 'V.Vercruyssen@gmail.com',
-    'version': '2.1',
-    'install_requires': ['numpy',
-                         'scipy',
-                         'scikit-learn'],
-    'packages': find_packages(),
+    'keywords': [
+        'outlier detection',
+        'anomaly detection',
+        'semi-supervised detection'
+    ],
+    'install_requires': 'requirements',
+    'packages': find_packages(exclude=['test']),
     'package_dir' : {'anomatools': 'anomatools'},
-    'keywords': 'anomaly detection',
     'include_package_data': True,
-    'classifiers':['Intended Audience :: Science/Research',
-                   'License :: OSI Approved :: Apache Software License',
-                   'Topic :: Scientific/Engineering :: Artificial Intelligence',
-                   'Programming Language :: Python :: 3']
+    'include_package_data': True,
+    'classifiers':[
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: Apache Software License',
+        'Topic :: Scientific/Engineering :: Artificial Intelligence',
+        'Programming Language :: Python :: 3'
+    ]
 }
 
 setup(**config)
