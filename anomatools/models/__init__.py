@@ -2,14 +2,14 @@
 
 from .inne import iNNE
 from .knno import kNNO
-from .ssdo import SSDO
-from .ssknno import SSkNNO
-from .copkmeans import COPKMeans
+#from .ssdo import SSDO
+#from .ssknno import SSkNNO
+#from .copkmeans import COPKMeans
 
 __all__ = [
     'iNNE',
     'kNNO',
-    'SSDO',
-    'SSkNNO',
-    'COPKMeans'
+    #'SSDO',
+    #'SSkNNO',
+    #'COPKMeans'
 ]

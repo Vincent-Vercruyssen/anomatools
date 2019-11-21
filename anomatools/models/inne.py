@@ -87,7 +87,7 @@ class iNNE(BaseEstimator, BaseDetector):
 
         # correct sample size
         n = X.shape[0]
-        self.sample_size = self.min(self.sample_size, n)
+        self.sample_size = min(self.sample_size, n)
 
         # construct the ensemble
         self.ensemble_ = []

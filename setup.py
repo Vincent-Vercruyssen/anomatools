@@ -5,12 +5,12 @@ except ImportError:
 
 import os
 
+this_directory = os.path.abspath(os.path.dirname(__file__))
+
 # get __version__ from _version.py
 ver_file = os.path.join('anomatools', 'version.py')
 with open(ver_file) as f:
     exec(f.read())
-
-this_directory = os.path.abspath(os.path.dirname(__file__))
 
 # read the contents of README.md
 def readme():
@@ -25,6 +25,7 @@ with open(os.path.join(this_directory, 'requirements.txt'),
 # setup configuration
 config = {
     'name': 'anomatools',
+    'version': __version__,
     'description':'A compact Python toolbox for anomaly detection.',
     'long_description': readme(),
     'long_description_content_type': 'text/markdown',
@@ -36,7 +37,7 @@ config = {
         'anomaly detection',
         'semi-supervised detection'
     ],
-    'install_requires': 'requirements',
+    'install_requires': requirements,
     'packages': find_packages(exclude=['test']),
     'package_dir' : {'anomatools': 'anomatools'},
     'include_package_data': True,

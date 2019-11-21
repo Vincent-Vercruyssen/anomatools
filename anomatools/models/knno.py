@@ -90,7 +90,7 @@ class kNNO(BaseEstimator, BaseDetector):
 
         # correct number of neighbors
         n = X.shape[0]
-        self.k = self.min(self.k, n)
+        self.k = min(self.k, n)
 
         # construct the neighbors tree
         self.tree_ = BallTree(X, leaf_size=32, metric=self.metric)
