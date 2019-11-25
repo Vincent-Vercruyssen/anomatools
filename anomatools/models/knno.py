@@ -140,6 +140,6 @@ class kNNO(BaseEstimator, BaseDetector):
         """
 
         if self.weighted:
-            return np.mean(D[1:, :], axis=1)
+            return np.mean(D[:, 1:], axis=1)
         else:
             return D[:, -1].flatten()

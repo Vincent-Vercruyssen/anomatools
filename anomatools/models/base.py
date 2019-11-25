@@ -205,6 +205,8 @@ class BaseDetector(metaclass=ABCMeta):
         1. Needs the training scores!
         """
 
+        check_is_fitted(self, ['scores_'])
+
         # compute statistics on training scores
         self.threshold_ = np.percentile(self.scores_, 100*(1.0-self.c)) + self.tol
         self.m_ = np.mean(self.scores_)
@@ -214,10 +216,10 @@ class BaseDetector(metaclass=ABCMeta):
 
         # training labels
         self.labels_ = np.ones(len(self.scores_), dtype=int)
-        self.labels_[self.labels_ <= self.threshold_] = -1
+        self.labels_[self.scores_ <= self.threshold_] = -1
 
     def _squashing_function(self, x, gamma):
         """ Compute the squashed x values.
         """
 
-        return np.exp(np.log(0.5) * np.power(x / gamma, 2))    
+        return 1.0 - np.exp(np.log(0.5) * np.power(x / gamma, 2))    
