@@ -71,6 +71,9 @@ class BaseDetector(metaclass=ABCMeta):
 
         self.tol = float(tol)
         self.verbose = bool(verbose)
+        
+        # internal
+        self.derived_squashed_ = False
 
     # must be implemented by derived classes
     @abstractmethod
@@ -109,7 +112,7 @@ class BaseDetector(metaclass=ABCMeta):
         pass
 
     # must NOT be implemented by derived classes
-    def fit_predict(self, X, y=None, probs=False):
+    def fit_predict(self, X, y=None, *args, **kwargs):
         """ Fit the model on data X.
 
         Parameters
@@ -118,8 +121,6 @@ class BaseDetector(metaclass=ABCMeta):
             The input instances. 
         y : np.array of shape (n_samples,), optional (default=None)
             The ground truth of the input instances.
-        probs : bool, optional (default=False)
-            Also return the probabilities.
 
         Returns
         -------
@@ -127,12 +128,10 @@ class BaseDetector(metaclass=ABCMeta):
             The labels (-1, +1) of the input instances.
         """
         
-        self.fit(X, y)
-        if probs:
-            return self.labels_, self.predict_proba(X)
+        self.fit(X, y, *args, **kwargs)
         return self.labels_
 
-    def predict(self, X):
+    def predict(self, X, *args, **kwargs):
         """ Predict the labels of X.
 
         Parameters
@@ -149,14 +148,14 @@ class BaseDetector(metaclass=ABCMeta):
         check_is_fitted(self, ['scores_', 'threshold_', 'labels_'])
 
         # call the decision function
-        scores = self.decision_function(X)
+        scores = self.decision_function(X, *args, **kwargs)
 
         # compute the labels
         labels = np.ones(len(scores), dtype=int)
         labels[scores <= self.threshold_] = -1
         return labels
 
-    def predict_proba(self, X, method='squashing'):
+    def predict_proba(self, X, method='squash', *args, **kwargs):
         """ Predict the anomaly probabilities of X using the fitted model.
 
         Parameters
@@ -166,8 +165,9 @@ class BaseDetector(metaclass=ABCMeta):
         method : str, optional (default='squashing')
             The method to compute the probabilities:
             'linear'    --> min-max scaling of the scores
-            'squashing' --> using an exponential squashing function
+            'squash'    --> using an exponential squashing function
             'unify'     --> use unifying scores
+            'none'      --> return scores as is
 
         Returns
         -------
@@ -178,21 +178,23 @@ class BaseDetector(metaclass=ABCMeta):
         check_is_fitted(self, ['scores_', 'threshold_', 'labels_'])
 
         # call the decision function
-        test_scores = self.decision_function(X)
+        test_scores = self.decision_function(X, *args, **kwargs)
 
         # compute the class probabilities
         probs = np.zeros([X.shape[0], 2])
         if method.lower() == 'linear':
             probs[:, 1] = (test_scores - self.min_) / (self.max_ - self.min_)
-        elif method.lower() == 'squashing':
+        elif method.lower() == 'squash':
             probs[:, 1] = self._squashing_function(test_scores, self.threshold_)
         elif method.lower() == 'unify':
             # from: https://github.com/yzhao062/pyod/blob/master/pyod/models/base.py
             pre_erf_score = (test_scores - self.m_) / (self.s_ * np.sqrt(2))
             erf_score = erf(pre_erf_score)
             probs[:, 1] = erf_score.clip(0, 1).ravel()
+        elif method.lower() == 'none':
+            return test_scores
         else:
-            raise ValueError(method, 'is not in [linear, squashing, unify]')
+            raise ValueError(method, 'is not in [linear, squash, unify, none]')
         
         probs[:, 0] = 1.0 - probs[:, 1]
         return probs
@@ -214,7 +216,14 @@ class BaseDetector(metaclass=ABCMeta):
         self.min_ = min(self.scores_)
         self.max_ = max(self.scores_)
 
-        # training labels
+        self._scores_to_labels()
+
+    def _scores_to_labels(self):
+        """ Transform the scores to discrete labels.
+        """
+
+        check_is_fitted(self, ['scores_'])
+
         self.labels_ = np.ones(len(self.scores_), dtype=int)
         self.labels_[self.scores_ <= self.threshold_] = -1
 

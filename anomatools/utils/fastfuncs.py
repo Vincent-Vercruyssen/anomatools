@@ -3,10 +3,8 @@
 
 Functions for fast distance computations.
 
-:author: Vincent Vercruyssen
-:year: 2018
+:author: Vincent Vercruyssen (2019)
 :license: Apache License, Version 2.0, see LICENSE for details.
-
 """
 
 import numpy as np

@@ -1,23 +1,21 @@
 # anomatools
 
-## What is anomatools?
-
-The `anomatools` package is a collection of **anomaly detection tools**.
+`anomatools` is a small Python package containing recent **anomaly detection algorithms**.
 Anomaly detection strives to detect *abnormal* or *anomalous* data points from a given (large) dataset.
-The package contains three anomaly detection algorithms and a clustering algorithm.
+The package contains two state-of-the-art (2018 and 2020) semi-supervised and two unsupervised anomaly detection algorithms.
 
 
 ## Installation
 
-1. Install the package directly from PyPi with the following command:
+Install the package directly from PyPi with the following command:
 ```bash
 pip install anomatools
 ```
-2. OR install the package using the `setup.py` file:
+OR install the package using the `setup.py` file:
 ```bash
 python setup.py install
 ```
-3. OR install it directly from GitHub itself:
+OR install it directly from GitHub itself:
 ```bash
 pip install git+https://github.com/Vincent-Vercruyssen/anomatools.git@master
 ```
@@ -25,52 +23,66 @@ pip install git+https://github.com/Vincent-Vercruyssen/anomatools.git@master
 
 ## Contents and usage
 
+### Semi-supervised anomaly detection
+
+Given a dataset with attributes **X** and labels *Y*, indicating whether a data point is *normal* or *anomalous*, semi-supervised anomaly detection algorithms are trained using all the instances **X** and some of the labels *Y*.
+Semi-supervised approaches to anomaly detection generally outperform the unsupervised approaches, because they can use the label information to correct the assumptions on which the unsupervised detection process is based.
+The `anomatools` package implements two recent semi-supervised anomaly detection algorithms:
+1. The **SSDO** (*semi-supervised detection of outliers*) algorithm first computes an unsupervised prior anomaly score and then corrects this score with the known label information [1].
+2. The **SSkNNO** (*semi-supervised k-nearest neighbor anomaly detection*) algorithm is a combination of the well-known *kNN* classifier and the *kNNO* (k-nearest neighbor outlier detection) method [2].
+
+Given a training dataset **X_train** with labels *Y_train*, and a test dataset **X_test**, the algorithms are applied as follows:
+```python
+from anomatools.models import SSkNNO, SSDO
+
+# train
+detector = SSDO()
+detector.fit(X_train, Y_train)
+
+# predict
+labels = detector.predict(X_test)
+```
+
+Similarly, the probability of each point in **X_test** being normal or anomalous can also be computed:
+```python
+probabilities = detector.predict_proba(X_test, method='squash')
+```
+
+Sometimes we are interested in detecting anomalies in the training data (e.g., when we are doing a post-mortem analysis):
+```python
+# train
+detector = SSDO()
+detector.fit(X_train, Y_train)
+
+# predict
+labels = detector.labels_
+
+```
+
 ### Unsupervised anomaly detection:
 
-Unsupervised anomaly detectors do not make use of label information (user feedback) when detecting anomalies in a dataset. Given a dataset with attributes **X** and target *Y*, indicating whether a data point is normal or an anomaly, the unsupervised detectors only use **X** to compute an anomaly score for each data point in the dataset.
-The `anomatools` package includes two unsupervised anomaly detection algorithms that can be initiated as follows:
+Unsupervised anomaly detectors do not make use of label information (user feedback) when detecting anomalies in a dataset. Given a dataset with attributes **X** and labels *Y*, the unsupervised detectors are trained using only **X**.
+The `anomatools` package implements two recent semi-supervised anomaly detection algorithms:
+1. The **kNNO** (*k-nearest neighbor outlier detection*) algorithm computes for each data point the anomaly score as the distance to its k-nearest neighbor in the dataset [[1](https://dl.acm.org/citation.cfm?id=335437)].
+2. The **iNNE** (*isolation nearest neighbor ensembles*) algorithm computes for each data point the anomaly score roughly based on how isolation the point is from the rest of the data [[2](https://onlinelibrary.wiley.com/doi/full/10.1111/coin.12156)].
+
+Given a training dataset **X_train** with labels *Y_train*, and a test dataset **X_test**, the algorithms are applied as follows:
 ```python
-import anomatools
-detector = anomatools.KNNO()
-detector = anomatools.INNE()
+from anomatools.models import kNNO, iNNE
 
-# compute the anomaly scores:
-scores = detector.fit_predict(X)
-```
-**KNNO** (k-nearest neighbor outlier detection) computes for each data point the anomaly score as the distance to its k-nearest neighbor in the dataset [[1](https://dl.acm.org/citation.cfm?id=335437)].
-**INNE** (isolation nearest neighbor ensembles) computes for each data point the anomaly score roughly based on how isolation the point is from the rest of the data [[2](https://onlinelibrary.wiley.com/doi/full/10.1111/coin.12156)].
+# train
+detector = kNNO()
+detector.fit(X_train, Y_train)
 
-
-### Semi-supervised anomaly detection:
-
-Unsupervised approaches are employed when label information is unavailable, a common condition in anomaly detection due to labels being expensive. However, they operate on some assumption about normal behavior to identify anomalies (e.g., normals are frequent). These assumptions are shaky and often violated in practice. Therefore, if *some* labels are available (some values of *Y* are known), we can use semi-supervised anomaly detection techniques:
-```python
-import anomatools
-detector = anomatools.SSDO()
-
-# compute the anomaly scores:
-scores = detector.fit_predict(X, Y)
-```
-**SSDO** (semi-supervised detection of outliers) first computes an unsupervised prior anomaly score and then corrects with the known label information [3]. The prior can be computed beforehand using any unsupervised anomaly detection algorithm or using the clustering subroutine of **SSDO**.
-
-### Constrained clustering:
-
-Constrained clustering algorithms cluster a datasets **X** with the help of user-specified constraints. The constraints can be of two types: `must_link` constraints indicate that two data points should be in the same cluster, while `cannot_link` constraints prohibit them from being in the same cluster. The package contains an implementation of the **COPKMeans** algorithm [[4](https://dl.acm.org/citation.cfm?id=655669)]:
-```python
-import anomatools
-detector = anomatools.clustering.COPKMeans()
-
-# compute the anomaly scores:
-centers, cluster_labels = detector.fit_predict(X, must_links, cannot_links)
+# predict
+labels = detector.predict(X_test)
 ```
 
-## Package structure:
+## Package structure
 
-The anomaly detection algorithms are located in: `anomatools/anomaly_detection/*`
+The anomaly detection algorithms are located in: `anomatools/models/`
 
-The clustering algorithms are located in: `anomatools/clustering/*`
-
-For further examples of how to use the algorithms see the notebooks: `anomatools/notebooks/*`
+For further examples of how to use the algorithms see the notebooks: `anomatools/notebooks/`
 
 
 ## Dependencies
@@ -84,24 +96,11 @@ The `anomatools` package requires the following python packages to be installed:
 
 ## Contact
 
-For any questions related to the code or the **SSDO** algorithm, contact the author of the package: [vincent.vercruyssen@kuleuven.be](mailto:vincent.vercruyssen@kuleuven.be)
+Contact the author of the package: [vincent.vercruyssen@kuleuven.be](mailto:vincent.vercruyssen@kuleuven.be)
 
 
-## Citing the original SSDO paper
+## References
 
-```
-@inproceedings{vercruyssen2018semi,
-    title       = {Semi-Supervised Anomaly Detection with an Application to Water Analytics},
-    author      = {Vincent Vercruyssen and
-                   Wannes Meert and
-                   Gust Verbruggen and
-                   Koen Maes and
-                   Ruben B{\"a}umer and
-                   Jesse Davis},
-    booktitle   = {{IEEE} International Conference on Data Mining, {ICDM} 2018, Singapore, November 17-20, 2018},
-    organization= {IEEE},
-    pages       = {527--536},
-    year        = {2018},
-    doi         = {10.1109/ICDM.2018.00068},
-}
-```
+[1] Vercruyssen, V., Meert, W., Verbruggen, G., Maes, K., Bäumer, R., Davis, J. (2018) *Semi-Supervised Anomaly Detection with an Application to Water Analytics.* IEEE International Conference on Data Mining (ICDM), Singapore. p527--536.
+
+[2] Vercruyssen, V., Meert, W., Davis, J. (2020) *Transfer Learning for Anomaly Detection through Localized and Unsupervised Instance Selection.* AAAI Conference on Artificial Intelligence, New York.

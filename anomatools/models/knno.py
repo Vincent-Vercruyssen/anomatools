@@ -96,7 +96,7 @@ class kNNO(BaseEstimator, BaseDetector):
         self.tree_ = BallTree(X, leaf_size=32, metric=self.metric)
 
         # COST: anomaly scores of the training data
-        D, _ = self.tree_.query(X, k=self.k+1)
+        D, _ = self.tree_.query(X, k=self.k+1, dualtree=True)
         self.scores_ = self._get_distances_by_method(D)
         self._process_anomaly_scores()
         
@@ -120,7 +120,7 @@ class kNNO(BaseEstimator, BaseDetector):
         X, _ = check_X_y(X, np.zeros(X.shape[0]))
 
         # compute the anomaly scores
-        D, _ = self.tree_.query(X, k=self.k)
+        D, _ = self.tree_.query(X, k=self.k, dualtree=True)
         scores = self._get_distances_by_method(D)
 
         return scores

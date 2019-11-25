@@ -1,6 +1,14 @@
-""" Vincent Vercruyssen, 2018. """
+# -*- coding: UTF-8 -*-
+"""
 
-# Authors: Vincent Vercruyssen
+Constrained KMeans.
+
+Reference:
+    https://github.com/Behrouz-Babaki/COP-Kmeans
+
+:author: Vincent Vercruyssen (2019)
+:license: Apache License, Version 2.0, see LICENSE for details.
+"""
 
 import math
 import random
@@ -9,7 +17,7 @@ import numpy as np
 from sklearn.utils.validation import check_X_y
 from sklearn.base import BaseEstimator
 
-from anomatools.utils.fastfuncs import fast_distance_matrix
+from .fastfuncs import fast_distance_matrix
 
 
 # ----------------------------------------------------------------------------

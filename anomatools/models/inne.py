@@ -36,6 +36,9 @@ class iNNE(BaseEstimator, BaseDetector):
 
     sample_size : int (default=16)
         Number of examples in each subsample.
+
+    metric : string (default=euclidean)
+        Distance metric for constructing the BallTree.
     
     Attributes
     ----------

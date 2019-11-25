@@ -1,192 +1,276 @@
 # -*- coding: UTF-8 -*-
 """
 
-Semi-Supervised Detection of Anomalies
+Semi-Supervised Detection of Anomalies.
 
 Reference:
     V. Vercruyssen, W. Meert, G. Verbruggen, K. Maes, R. Baumer, J. Davis.
     Semi-supervised anomaly detection with an application to water analytics.
     In IEEE International Conference on Data Mining, Singapore, 2018, pp. 527–536.
 
-:author: Vincent Vercruyssen
-:year: 2018
+:author: Vincent Vercruyssen (2019)
 :license: Apache License, Version 2.0, see LICENSE for details.
-
 """
 
 import numpy as np
 import scipy.stats as sps
 
 from collections import Counter
-from scipy.spatial import cKDTree
+from sklearn.neighbors import BallTree
 from sklearn.utils.validation import check_X_y
 from sklearn.base import BaseEstimator
-from sklearn.ensemble import IsolationForest
-from sklearn.neighbors import LocalOutlierFactor
 
-from anomatools.clustering.COPKMeans import COPKMeans
-from anomatools.utils.fastfuncs import fast_distance_matrix
+from .base import BaseDetector
+from ..utils.copkmeans import COPKMeans
+from ..utils.fastfuncs import fast_distance_matrix
 
 
 # ----------------------------------------------------------------------------
 # SSDO class
 # ----------------------------------------------------------------------------
 
-class SSDO(BaseEstimator):
+class SSDO(BaseEstimator, BaseDetector):
     """
     Parameters
     ----------
-    n_clusters : int (default=10)
-        Number of clusters used for the COP k-means clustering algorithm.
-
-    alpha : float (default=2.3)
-        User influence parameter that controls the weight given to the
-        unsupervised and label propragation components of an instance's
-        anomaly score.
-
     k : int (default=30)
         Controls how many instances are updated by propagating the label of a
         single labeled instance.
 
-    contamination : float (default=0.1)
-        Estimate of the expected percentage of anomalies in the data.
+    alpha : float (default=2.3)
+        User influence parameter that controls the weight given to the
+        unsupervised and label propragation components of an instance's
+        anomaly score. Higher = more weight to supervised component.
 
-    unsupervised_prior : str (default='SSDO')
-        Unsupervised baseline classifier:
-            'SSDO'    --> SSDO baseline (based on constrained k-means clustering)
+    n_clusters : int (default=10)
+        Number of clusters used for the COP k-means clustering algorithm.
+
+    metric : string (default=euclidean)
+        Distance metric for constructing the BallTree.
+
+    unsupervised_prior : str (default='ssdo')
+        Unsupervised prior:
+            'ssdo'    --> SSDO baseline (based on constrained k-means clustering)
             'other'   --> use a different prior passed to SSDO
+
+    Attributes
+    ----------
+    scores_ : np.array of shape (n_samples,)
+        The anomaly scores of the training data (higher = more abnormal).
+    
+    threshold_ : float
+        The cutoff threshold on the anomaly score separating the normals
+        from the anomalies. This is based on the `contamination` parameter.
+
+    labels_ : np.array of shape (n_samples,)
+        Binary anomaly labels (-1 = normal, +1 = anomaly).
     """
 
     def __init__(self,
-                 n_clusters=10,                      # number of clusters for the ssdo base classifier
-                 alpha=2.3,                          # the alpha parameter for ssdo label propagation
-                 k=30,                               # the k parameter for ssdo label propagation
-                 contamination=0.1,                  # expected proportion of anomalies in the data
-                 unsupervised_prior='SSDO',          # type of base classifier to use
-                 tol=1e-8,                           # tolerance
+                 k=30,
+                 alpha=2.3,
+                 n_clusters=10,
+                 unsupervised_prior='ssdo',
+                 contamination=0.1,
+                 metric='euclidean',
+                 tol=1e-8,
                  verbose=False):
-        super().__init__()
+        super().__init__(
+            contamination=contamination,
+            metric=metric,
+            tol=tol,
+            verbose=verbose)
 
         # instantiate the parameters
         self.nc = int(n_clusters)
         self.alpha = float(alpha)
         self.k = int(k)
-        self.c = float(contamination)
         self.unsupervised_prior = str(unsupervised_prior).lower()
-        self.tol = float(tol)
-        self.verbose = bool(verbose)
 
-    def fit_predict(self, X, y=None, prior=None):
-        """ Fit the model to the training set X and returns the anomaly score
-            of the instances in X.
+    def fit(self, X, y=None, prior=None):
+        """ Fit the model on data X.
 
-        :param X : np.array(), shape (n_samples, n_features)
-            The samples to compute anomaly score w.r.t. the training samples.
-        :param y : np.array(), shape (n_samples), default = None
-            Labels for examples in X.
-        :param prior : np.array(), shape (n_samples)
-            Unsupervised prior to detect the anomalies if SSDO is not used.
+        Parameters
+        ----------
+        X : np.array of shape (n_samples, n_features)
+            The input instances. 
+        y : np.array of shape (n_samples,), optional (default=None)
+            The ground truth of the input instances.
+        prior : np.array of shape (n_samples,), optional (default=None)
+            Unsupervised prior of the input instances.
 
-        :returns y_score : np.array(), shape (n_samples)
-            Anomaly score for the examples in X.
-        :returns y_pred : np.array(), shape (n_samples)
-            Returns -1 for inliers and +1 for anomalies/outliers.
+        Returns
+        -------
+        self : object
         """
 
-        # unsupervised prior not necessary during training
-        return self.fit(X, y).predict(X, prior=prior)
-
-    def fit(self, X, y=None):
-        """ Fit the model using data in X.
-
-        :param X : np.array(), shape (n_samples, n_features)
-            The samples to compute anomaly score w.r.t. the training samples.
-        :param y : np.array(), shape (n_samples), default = None
-            Labels for examples in X.
-
-        :returns self : object
-        """
-
-        # check input
+        # check the inputs
         if y is None:
             y = np.zeros(len(X))
         X, y = check_X_y(X, y)
 
+        # store label information
+        ixl = np.where(y != 0)[0]
+        self.feedback_ = y[ixl]
+        self.X_feedback_ = X[ixl, :]
+
         # compute the prior
         if self.unsupervised_prior == 'ssdo':
-            # COPKMeans classifier
-            self._fit_prior_parameters(X, y)
+            self._fit_prior_parameters(X, self.feedback_)
+            prior = self._compute_prior(X)
         elif self.unsupervised_prior == 'other':
-            pass
+            if prior is None:
+                raise ValueError('Prior cannot be None when `other` is selected')
         else:
-            raise ValueError('INPUT ERROR: `unsupervised_prior` unknown!')
+            raise ValueError(self.unsupervised_prior,
+                'is not in [ssdo, other]')
+        self.prior_threshold_ = np.percentile(prior, 100*(1.0-self.c)) + self.tol
 
         # compute eta parameter
-        self.eta = self._compute_eta(X)
+        self.eta_ = self._compute_eta(X)
 
-        # store the labeled points
-        self.labels_available = False
-        ixl = np.where(y != 0.0)[0]
-        if len(ixl) > 0:
-            self.labels_available = True
-            self._labels = y[ixl]
-            self._X_labels = X[ixl, :]
+        # feedback available
+        if self.feedback_.any():
+            self.scores_ = self._compute_posterior(X, prior, self.eta_)
+
+            self.threshold_ = 0.5
+            self.m_ = np.mean(self.scores_)
+            self.s_ = np.std(self.scores_)
+            self.min_ = 0.0
+            self.max_ = 1.0
+            self._scores_to_labels()
+
+        # no feedback
+        else:
+            self.scores_ = prior
+            self._process_anomaly_scores()
 
         return self
+    
+    def decision_function(self, X, prior=None):
+        """ Compute the anomaly scores of X.
+        
+        Parameters
+        ----------
+        X : np.array of shape (n_samples, n_features)
+            The input instances.
+        prior : np.array of shape (n_samples,), optional (default=None)
+            Unsupervised prior of the input instances.
 
-    def predict(self, X, prior=None):
-        """ Compute the anomaly score for unseen instances.
-
-        :param X : np.array(), shape (n_samples, n_features)
-            The samples in the test set for which to compute the anomaly score.
-        :param prior : np.array(), shape (n_samples)
-            Unsupervised prior to detect the anomalies if SSDO is not used.
-
-        :returns y_score : np.array(), shape (n_samples)
-            Anomaly score for the examples in X.
-        :returns y_pred : np.array(), shape (n_samples)
-            Returns -1 for inliers and +1 for anomalies/outliers.
+        Returns
+        -------
+        scores : np.array of shape (n_samples,)
+            The anomaly scores of the input instances.
         """
 
-        # check input
-        X, _ = check_X_y(X, np.zeros(len(X)))
+        # check the inputs
+        X, _ = check_X_y(X, np.zeros(X.shape[0]))
+
+        # compute the prior
+        if self.unsupervised_prior == 'ssdo':
+            prior = self._compute_prior(X)
+        elif self.unsupervised_prior == 'other':
+            if prior is None:
+                raise ValueError('Prior cannot be None when `other` is selected')
+        else:
+            raise ValueError(self.unsupervised_prior,
+                'is not in [ssdo, other]')
+
+        # if no labels are available, reduce to unsupervised
+        if not(self.feedback_.any()):
+            return prior
+
+        # compute posterior (includes squashing prior)
+        posterior = self._compute_posterior(X, prior, self.eta_)
+
+        return posterior
+            
+    def _compute_prior(self, X):
+        """ Compute the constrained-clustering-based outlier score.
+
+        Parameters
+        ----------
+        X : np.array of shape (n_samples, n_features)
+            The input instances.
+
+        Returns
+        -------
+        prior : np.array of shape (n_samples,)
+            Unscaled unsupervised prior
+        """
 
         n, _ = X.shape
 
+        # predict the cluster labels + distances to the clusters
+        _, labels, distances = self.clus.predict(X, include_distances=True)
+
         # compute the prior
-        if self.unsupervised_prior == 'ssdo':
-            prior = self._compute_prior(X)      # in [0, 1]
-        elif self.unsupervised_prior == 'other':
-            prior = (prior - min(prior)) / (max(prior) - min(prior))
-        else:
-            print('WARNING: no unsupervised `prior` for predict()!')
-            prior = np.ones(n, dtype=np.float)
-        
-        # scale the prior using the squashing function
-        # TODO: this is the expected contamination in the test set!
-        gamma = np.sort(prior)[int(n * (1.0 - self.c))] + self.tol
-        prior = np.array([1 - self._squashing_function(x, gamma) for x in prior])
+        prior = np.zeros(n, dtype=float)
+        for i, l in enumerate(labels):
+            if self.max_intra_cluster[l] < self.tol:
+                point_deviation = 1.0
+            else:
+                point_deviation = distances[i] / self.max_intra_cluster[l]
+            prior[i] = (point_deviation * self.cluster_deviation[l]) / self.cluster_sizes[l]
 
-        # compute the posterior
-        if self.labels_available:
-            y_score = self._compute_posterior(X, prior, self.eta)
-        else:
-            y_score = prior
+        return prior
 
-        # y_pred (using the expected contamination)
-        # TODO: this is the expected contamination in the test set!
-        offset = np.sort(y_score)[int(n * (1.0 - self.c))]
-        y_pred = np.ones(n, dtype=int)
-        y_pred[y_score < offset] = -1
+    def _compute_posterior(self, X, prior, eta):
+        """ Update the prior score with label propagation.
 
-        return y_score, y_pred
+        Parameters
+        ----------
+        X : np.array of shape (n_samples, n_features)
+            The input instances.
+        prior : np.array of shape (n_samples,), optional (default=None)
+            Unsupervised prior of the input instances.
+        eta : float
+            Eta parameter is the harmonic mean of the k-distances.
+
+        Returns
+        -------
+        posterior : np.array of shape (n_samples)
+            Posterior anomaly score between 0 and 1.
+        """
+
+        n, _ = X.shape
+
+        # squash the prior
+        prior = self._squashing_function(prior, self.prior_threshold_)
+
+        # labeled examples
+        ixa = np.where(self.feedback_ == 1.0)[0]
+        ixn = np.where(self.feedback_ == -1.0)[0]
+
+        # compute limited distance matrices (to normals, to anomalies)
+        Dnorm = fast_distance_matrix(X, self.X_feedback_[ixn, :])
+        Danom = fast_distance_matrix(X, self.X_feedback_[ixa, :])
+
+        # compute posterior
+        posterior = np.zeros(n, dtype=float)
+        for i in range(n):
+            # weighted distance to anomalies & normals
+            da = np.sum(self._ssdo_squashing_function(Danom[i, :], eta))
+            dn = np.sum(self._ssdo_squashing_function(Dnorm[i, :], eta))
+            # posterior
+            z = 1.0 / (1.0 + self.alpha * (da + dn))
+            posterior[i] = z * (prior[i] + self.alpha * da)
+
+        return posterior
 
     def _fit_prior_parameters(self, X, y):
         """ Fit the parameters for computing the prior score:
-            - (constrained) clustering
-            - cluster size
-            - max intra-cluster distance
-            - cluster deviation
+        
+        Parameters
+        ----------
+        X : np.array of shape (n_samples, n_features)
+            The input instances.
+        prior : np.array of shape (n_samples,), optional (default=None)
+            Unsupervised prior of the input instances.
+
+        Returns
+        -------
+        self : object
         """
 
         # construct cannot-link constraints + remove impossible cannot-links
@@ -225,75 +309,26 @@ class SSDO(BaseEstimator):
 
         return self
 
-    def _compute_prior(self, X):
-        """ Compute the constrained-clustering-based outlier score.
-
-        :returns prior : np.array(), shape (n_samples)
-            Prior anomaly score between 0 and 1.
-        """
-
-        n, _ = X.shape
-
-        # predict the cluster labels + distances to the clusters
-        _, labels, distances = self.clus.predict(X, include_distances=True)
-
-        # compute the prior
-        prior = np.zeros(n)
-        for i, l in enumerate(labels):
-            if self.max_intra_cluster[l] < self.tol:
-                point_deviation = 1.0
-            else:
-                point_deviation = distances[i] / self.max_intra_cluster[l]
-            prior[i] = (point_deviation * self.cluster_deviation[l]) / self.cluster_sizes[l]
-
-        return prior
-
-    def _compute_posterior(self, X, prior, eta):
-        """ Update the clustering score with label propagation.
-
-        :returns posterior : np.array(), shape (n_samples)
-            Posterior anomaly score between 0 and 1.
-        """
-
-        n, _ = X.shape
-
-        # labeled examples
-        ixa = np.where(self._labels == 1.0)[0]
-        ixn = np.where(self._labels == -1.0)[0]
-
-        # compute limited distance matrices (to normals, to anomalies)
-        Dnorm = fast_distance_matrix(X, self._X_labels[ixn, :])
-        Danom = fast_distance_matrix(X, self._X_labels[ixa, :])
-
-        # compute posterior
-        posterior = np.zeros(n)
-        for i in range(n):
-            # weighted distance to anomalies & normals
-            da = np.sum(self._squashing_function(Danom[i, :], eta))
-            dn = np.sum(self._squashing_function(Dnorm[i, :], eta))
-            # posterior
-            z = 1.0 / (1.0 + self.alpha * (da + dn))
-            posterior[i] = z * (prior[i] + self.alpha * da)
-
-        return posterior
-
     def _compute_eta(self, X):
         """ Compute the eta parameter.
 
-        :returns eta : float
+        Parameters
+        ----------
+        X : np.array of shape (n_samples, n_features)
+            The input instances.
+        
+        Returns
+        -------
+        eta : float
             Eta parameter is the harmonic mean of the k-distances.
         """
 
         n, _ = X.shape
 
         # construct KD-tree
-        tree = cKDTree(X, leafsize=16)
-
-        # query distance to k'th nearest neighbor of each point
-        d = np.zeros(n)
-        for i, x in enumerate(X):
-            dist, _ = tree.query(x, k=self.k+1)
-            d[i] = dist[-1]
+        tree = BallTree(X, leaf_size=32, metric=self.metric)
+        D, _ = tree.query(X, k=self.k+1, dualtree=True)
+        d = D[:, -1].flatten()
 
         # compute eta as the harmonic mean of the k-distances
         filler = min(d[d > 0.0])
@@ -305,6 +340,8 @@ class SSDO(BaseEstimator):
 
         return eta
 
-    def _squashing_function(self, x, p):
-        """ Compute the value of x under squashing function with parameter p. """
-        return np.exp(np.log(0.5) * np.power(x / p, 2))
+    def _ssdo_squashing_function(self, x, gamma):
+        """ Compute the value of x under squashing function.
+        """
+        
+        return np.exp(np.log(0.5) * np.power(x / gamma, 2))

@@ -3,10 +3,8 @@
 
 Plotting functions.
 
-:author: Vincent Vercruyssen
-:year: 2018
+:author: Vincent Vercruyssen (2019)
 :license: Apache License, Version 2.0, see LICENSE for details.
-
 """
 
 import numpy as np
@@ -41,9 +39,6 @@ def plot_2D_normals_anomalies(X, y, figure_size=(6, 6)):
 def plot_2D_classifier(clf, X, y=None, steps=50, margin_size=0.1, predict_scores=True, contours=True, figure_size=(6, 6)):
     """ Plot 2D contours of a classifier.
         Fits and predicts the classifier itself.
-
-    :param predict_scores : bool
-        TRUE: the predict function outputs probabilities/scores and discrete labels.
     """
 
     # check input
@@ -73,7 +68,7 @@ def plot_2D_classifier(clf, X, y=None, steps=50, margin_size=0.1, predict_scores
     else:
         clf.fit(X, y)
     if predict_scores:
-        Z, _ = clf.predict(X_mesh)
+        Z = clf.predict_proba(X_mesh)[:, 1]
     else:
         Z = clf.predict(X_mesh)
     Z = Z.reshape(xx.shape)
