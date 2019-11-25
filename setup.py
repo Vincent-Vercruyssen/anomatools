@@ -14,12 +14,11 @@ with open(ver_file) as f:
 
 # read the contents of README.md
 def readme():
-    with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+    with open(os.path.join(this_directory, 'README.md')) as f:
         return f.read()
 
 # read the contents of requirements.txt
-with open(os.path.join(this_directory, 'requirements.txt'),
-          encoding='utf-8') as f:
+with open(os.path.join(this_directory, 'requirements.txt')) as f:
     requirements = f.read().splitlines()
 
 # setup configuration
