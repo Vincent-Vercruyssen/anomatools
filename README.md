@@ -63,8 +63,8 @@ labels = detector.labels_
 
 Unsupervised anomaly detectors do not make use of label information (user feedback) when detecting anomalies in a dataset. Given a dataset with attributes **X** and labels *Y*, the unsupervised detectors are trained using only **X**.
 The `anomatools` package implements two recent semi-supervised anomaly detection algorithms:
-1. The **kNNO** (*k-nearest neighbor outlier detection*) algorithm computes for each data point the anomaly score as the distance to its k-nearest neighbor in the dataset [[1](https://dl.acm.org/citation.cfm?id=335437)].
-2. The **iNNE** (*isolation nearest neighbor ensembles*) algorithm computes for each data point the anomaly score roughly based on how isolation the point is from the rest of the data [[2](https://onlinelibrary.wiley.com/doi/full/10.1111/coin.12156)].
+1. The **kNNO** (*k-nearest neighbor outlier detection*) algorithm computes for each data point the anomaly score as the distance to its k-nearest neighbor in the dataset [[3](https://dl.acm.org/citation.cfm?id=335437)].
+2. The **iNNE** (*isolation nearest neighbor ensembles*) algorithm computes for each data point the anomaly score roughly based on how isolation the point is from the rest of the data [[4](https://onlinelibrary.wiley.com/doi/full/10.1111/coin.12156)].
 
 Given a training dataset **X_train** with labels *Y_train*, and a test dataset **X_test**, the algorithms are applied as follows:
 ```python
