@@ -1,3 +1,4 @@
 prune notebooks
 include README.md
 include requirements.txt
+include LICENSE
