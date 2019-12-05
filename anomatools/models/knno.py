@@ -76,9 +76,9 @@ class kNNO(BaseEstimator, BaseDetector):
         Parameters
         ----------
         X : np.array of shape (n_samples, n_features)
-            The input instances. 
-        y : np.array of shape (n_samples,), optional (default=None)
-            The ground truth of the input instances.
+            The input instances.
+        y : Ignored
+            Not used, present for API consistency by convention.
 
         Returns
         -------
