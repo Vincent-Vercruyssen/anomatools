@@ -95,7 +95,7 @@ class SSkNNO(BaseEstimator, BaseDetector):
         if y is None:
             y = np.zeros(len(X))
         X, y = check_X_y(X, y)
-        self.feedback_ = y
+        self.feedback_ = y.copy()
 
         # correct number of neighbors
         n = X.shape[0]
@@ -118,18 +118,11 @@ class SSkNNO(BaseEstimator, BaseDetector):
             
             # compute posterior (includes squashing prior)
             self.scores_ = self._compute_posterior(Ixs_radius, D_radius, prior)
-            
-            self.threshold_ = 0.5
-            self.m_ = np.mean(self.scores_)
-            self.s_ = np.std(self.scores_)
-            self.min_ = 0.0
-            self.max_ = 1.0
-            self._scores_to_labels()
-            
-        # score statistics: no labels --> kNNO
+
         else:
-            self.scores_ = prior
-            self._process_anomaly_scores()
+            self.scores_ = prior.copy()
+        
+        self._process_anomaly_scores()
         
         return self
 

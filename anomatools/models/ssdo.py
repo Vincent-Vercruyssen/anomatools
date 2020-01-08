@@ -12,6 +12,7 @@ Reference:
 :license: Apache License, Version 2.0, see LICENSE for details.
 """
 
+import copy
 import numpy as np
 import scipy.stats as sps
 
@@ -111,8 +112,8 @@ class SSDO(BaseEstimator, BaseDetector):
 
         # store label information
         ixl = np.where(y != 0)[0]
-        self.feedback_ = y[ixl]
-        self.X_feedback_ = X[ixl, :]
+        self.feedback_ = y[ixl].copy()
+        self.X_feedback_ = X[ixl, :].copy()
 
         # compute the prior
         if self.unsupervised_prior == 'ssdo':
@@ -132,18 +133,10 @@ class SSDO(BaseEstimator, BaseDetector):
         # feedback available
         if self.feedback_.any():
             self.scores_ = self._compute_posterior(X, prior, self.eta_)
-
-            self.threshold_ = 0.5
-            self.m_ = np.mean(self.scores_)
-            self.s_ = np.std(self.scores_)
-            self.min_ = 0.0
-            self.max_ = 1.0
-            self._scores_to_labels()
-
-        # no feedback
         else:
-            self.scores_ = prior
-            self._process_anomaly_scores()
+            self.scores_ = prior.copy()
+        
+        self.scores_to_labels_
 
         return self
     
