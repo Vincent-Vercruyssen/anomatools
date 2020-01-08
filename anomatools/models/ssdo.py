@@ -133,10 +133,11 @@ class SSDO(BaseEstimator, BaseDetector):
         # feedback available
         if self.feedback_.any():
             self.scores_ = self._compute_posterior(X, prior, self.eta_)
+        
         else:
             self.scores_ = prior.copy()
-        
-        self.scores_to_labels_
+            
+        self._process_anomaly_scores()
 
         return self
     
