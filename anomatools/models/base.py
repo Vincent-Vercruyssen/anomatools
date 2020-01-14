@@ -59,8 +59,8 @@ class BaseDetector(metaclass=ABCMeta):
         super().__init__()
 
         # contamination
-        if not(0.0 < contamination <= 0.5):
-            raise ValueError(contamination, 'is not a float in (0.0, 0.5]')
+        if not(0.0 < contamination <= 1.0):
+            raise ValueError(contamination, 'is not a float in (0.0, 1.0]')
         self.c = float(contamination)
 
         # distance metric
