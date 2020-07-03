@@ -39,6 +39,7 @@ class iNNE(BaseEstimator, BaseDetector):
 
     metric : string (default=euclidean)
         Distance metric for constructing the BallTree.
+        Can be any of sklearn.neighbors.DistanceMetric methods or 'dtw'
     
     Attributes
     ----------
@@ -98,7 +99,7 @@ class iNNE(BaseEstimator, BaseDetector):
             # random sample
             ixs = np.random.choice(n, self.sample_size, replace=False)
             
-            sphere = HyperSphere(X[ixs, :], self.metric)
+            sphere = HyperSphere(X[ixs, :], self.dist)
             self.ensemble_.append(sphere)
 
         # COST: anomaly scores of the training data
@@ -140,11 +141,12 @@ class iNNE(BaseEstimator, BaseDetector):
 
 class HyperSphere:
     
-    def __init__(self, X, metric):
+    def __init__(self, X, dist):
         # constructs hypersphere
         self.nm = X.shape[0]
-        self.nn_tree = BallTree(X, leaf_size=16, metric=metric)
-        nn_dists, nn_ixs = self.nn_tree.query(X, k=2)
+        self.dist = dist
+        self.dist.fit(X)
+        nn_dists, nn_ixs = self.dist.search_neighbors(X, k=2, exclude_first=True)
         
         # radii
         self.radii = nn_dists[:, 1].flatten() + 1e-10
@@ -157,7 +159,7 @@ class HyperSphere:
         n, _ = X.shape
         scores = np.ones(n, dtype=float)
         
-        s_dists, s_ixs = sphere.nn_tree.query(X, k=self.nm)
+        s_dists, s_ixs = sphere.dist.search_neighbors(X, k=self.nm-1, exclude_first=False)
         
         for i in range(n):
             cr = self.radii[s_ixs[i, :].flatten()]

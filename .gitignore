@@ -19,3 +19,7 @@ build/
 
 # editor
 .vscode/
+.DS_Store
+
+# other
+data/

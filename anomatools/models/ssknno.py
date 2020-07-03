@@ -38,6 +38,7 @@ class SSkNNO(BaseEstimator, BaseDetector):
 
     metric : string (default=euclidean)
         Distance metric for constructing the BallTree.
+        Can be any of sklearn.neighbors.DistanceMetric methods or 'dtw'
 
     supervision : str (default=loose)
         How to compute the supervised score component.
@@ -96,16 +97,17 @@ class SSkNNO(BaseEstimator, BaseDetector):
             y = np.zeros(len(X))
         X, y = check_X_y(X, y)
         self.feedback_ = y.copy()
+        X = X.astype(np.double)
 
         # correct number of neighbors
         n = X.shape[0]
         self.k = min(self.k, n)
 
         # construct tree
-        self.tree_ = BallTree(X, leaf_size=32, metric=self.metric)
+        self.dist.fit(X)
 
         # unsupervised score + threshold
-        D, _ = self.tree_.query(X, k=self.k+1, dualtree=True)
+        D, _ = self.dist.search_neighbors(X, k=self.k, exclude_first=True)
         prior = self._compute_prior(D)
         self.prior_threshold_ = np.percentile(prior, 100*(1.0-self.c)) + self.tol
         
@@ -113,8 +115,7 @@ class SSkNNO(BaseEstimator, BaseDetector):
         if self.feedback_.any():
             # collect ALL the nearest neighbors in the radius
             self.radii_ = D[:, -1].flatten() + self.tol
-            Ixs_radius, D_radius = self.tree_.query_radius(
-                X, r=self.radii_, return_distance=True, count_only=False)
+            Ixs_radius, D_radius = self.dist.search_radius(X, r=self.radii_)
             
             # compute posterior (includes squashing prior)
             self.scores_ = self._compute_posterior(Ixs_radius, D_radius, prior)
@@ -144,7 +145,7 @@ class SSkNNO(BaseEstimator, BaseDetector):
         X, _ = check_X_y(X, np.zeros(X.shape[0]))
 
         # unsupervised scores
-        D, _ = self.tree_.query(X, k=self.k, dualtree=True)
+        D, _ = self.dist.search_neighbors(X, k=self.k)
         prior = self._compute_prior(D)
 
         # if no labels are available, reduce to kNNO
@@ -153,8 +154,7 @@ class SSkNNO(BaseEstimator, BaseDetector):
 
         # collect ALL the nearest neighbors in the radius
         nn_radii = D[:, -1].flatten() + self.tol
-        Ixs_radius, D_radius = self.tree_.query_radius(
-            X, r=nn_radii, return_distance=True, count_only=False)
+        Ixs_radius, D_radius = self.dist.search_radius(X, r=nn_radii)
 
         # compute posterior (includes squashing prior)
         posterior = self._compute_posterior(Ixs_radius, D_radius, prior)
@@ -237,6 +237,6 @@ class SSkNNO(BaseEstimator, BaseDetector):
         """
 
         if self.weighted:
-            return np.mean(D[:, 1:], axis=1)
+            return np.mean(D, axis=1)
         else:
             return D[:, -1].flatten()

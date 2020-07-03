@@ -12,7 +12,8 @@ import numpy as np
 from abc import abstractmethod, ABCMeta
 from scipy.special import erf
 from sklearn.utils.validation import check_is_fitted
-from sklearn.neighbors import DistanceMetric
+
+from ..utils.utils import DistanceFun
 
 
 # ----------------------------------------------------------------------------
@@ -29,7 +30,8 @@ class BaseDetector(metaclass=ABCMeta):
         The expected proportion of anomalies in the dataset.
 
     metric : string (default=euclidean)
-        Distance metric used in the detector.
+        Distance metric for constructing the BallTree.
+        Can be any of sklearn.neighbors.DistanceMetric methods or 'dtw'.
 
     tol : float in (0, +inf), optional (default=1e-10)
         The tolerance.
@@ -63,12 +65,8 @@ class BaseDetector(metaclass=ABCMeta):
             raise ValueError(contamination, 'is not a float in (0.0, 1.0]')
         self.c = float(contamination)
 
-        # distance metric
-        try:
-            self.metric = DistanceMetric.get_metric(metric)
-        except:
-            raise ValueError(metric, 'is not an accepted distance metric')
-
+        # other parameters
+        self.dist = DistanceFun(metric=metric)
         self.tol = float(tol)
         self.verbose = bool(verbose)
         

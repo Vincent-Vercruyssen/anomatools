@@ -23,7 +23,6 @@ from sklearn.base import BaseEstimator
 
 from .base import BaseDetector
 from ..utils.copkmeans import COPKMeans
-from ..utils.fastfuncs import fast_distance_matrix
 
 
 # ----------------------------------------------------------------------------
@@ -48,6 +47,7 @@ class SSDO(BaseEstimator, BaseDetector):
 
     metric : string (default=euclidean)
         Distance metric for constructing the BallTree.
+        Can be any of sklearn.neighbors.DistanceMetric methods or 'dtw'
 
     unsupervised_prior : str (default='ssdo')
         Unsupervised prior:
@@ -196,7 +196,7 @@ class SSDO(BaseEstimator, BaseDetector):
         n, _ = X.shape
 
         # predict the cluster labels + distances to the clusters
-        _, labels, distances = self.clus.predict(X, include_distances=True)
+        _, labels, distances = self.clus.predict(X.astype(np.double), include_distances=True)
 
         # compute the prior
         prior = np.zeros(n, dtype=float)
@@ -237,8 +237,8 @@ class SSDO(BaseEstimator, BaseDetector):
         ixn = np.where(self.feedback_ == -1.0)[0]
 
         # compute limited distance matrices (to normals, to anomalies)
-        Dnorm = fast_distance_matrix(X, self.X_feedback_[ixn, :])
-        Danom = fast_distance_matrix(X, self.X_feedback_[ixa, :])
+        Dnorm = self.dist.pairwise_multiple(X, self.X_feedback_[ixn, :])
+        Danom = self.dist.pairwise_multiple(X, self.X_feedback_[ixa, :])
 
         # compute posterior
         posterior = np.zeros(n, dtype=float)
@@ -273,7 +273,7 @@ class SSDO(BaseEstimator, BaseDetector):
         cl = np.array(np.meshgrid(ixa, ixn)).T.reshape(-1,2)
 
         # cluster
-        self.clus = COPKMeans(n_clusters=self.nc)
+        self.clus = COPKMeans(n_clusters=self.nc, metric=self.dist.metric_name)
         centroids, labels = self.clus.fit_predict(X, cannot_link=cl)
         self.nc = self.clus.n_clusters
 
@@ -284,7 +284,7 @@ class SSDO(BaseEstimator, BaseDetector):
         self.max_intra_cluster = np.zeros(self.nc, dtype=np.float)
         for i, l in enumerate(labels):
             c = centroids[l, :]
-            d = np.linalg.norm(X[i, :] - c)
+            d = self.dist.pairwise_single(X[i, :], c)
             if d > self.max_intra_cluster[l]:
                 self.max_intra_cluster[l] = d
 
@@ -296,10 +296,10 @@ class SSDO(BaseEstimator, BaseDetector):
             for i in range(self.nc):
                 for j in range(self.nc):
                     if i != j:
-                        d = np.linalg.norm(centroids[i, :] - centroids[j, :])
+                        d = self.dist.pairwise_single(centroids[i, :], centroids[j, :])
                         if not(d < self.tol) and d < inter_cluster[i]:
                             inter_cluster[i] = d
-        self.cluster_deviation = inter_cluster / max(inter_cluster)
+            self.cluster_deviation = inter_cluster / max(inter_cluster)
 
         return self
 
@@ -320,8 +320,8 @@ class SSDO(BaseEstimator, BaseDetector):
         n, _ = X.shape
 
         # construct KD-tree
-        tree = BallTree(X, leaf_size=32, metric=self.metric)
-        D, _ = tree.query(X, k=self.k+1, dualtree=True)
+        self.dist.fit(X)
+        D, _ = self.dist.search_neighbors(X, k=self.k, exclude_first=True)
         d = D[:, -1].flatten()
 
         # compute eta as the harmonic mean of the k-distances

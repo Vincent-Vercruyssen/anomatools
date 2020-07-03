@@ -17,7 +17,7 @@ import numpy as np
 from sklearn.utils.validation import check_X_y
 from sklearn.base import BaseEstimator
 
-from .fastfuncs import fast_distance_matrix
+from .utils import DistanceFun
 
 
 # ----------------------------------------------------------------------------
@@ -40,6 +40,10 @@ class COPKMeans(BaseEstimator):
     max_iter : int (default=300)
         Maximum iterations for the algorithm.
 
+    metric : string (default=euclidean)
+        Distance metric for constructing the BallTree.
+        Can be any of sklearn.neighbors.DistanceMetric methods or 'dtw'
+
     chunk_size : int (default=2000)
         Size of each chunck to recompute the cluster centra.
     """
@@ -49,6 +53,7 @@ class COPKMeans(BaseEstimator):
                  init='kmpp',
                  n_init=3,
                  max_iter=300,
+                 metric='euclidean',
                  chunk_size=2000,
                  tol=1e-10,
                  verbose=False):
@@ -65,6 +70,7 @@ class COPKMeans(BaseEstimator):
         self.D_matrix_ = None
         self.labels_ = None
         self.cluster_centers_ = None
+        self.dist = DistanceFun(metric)
 
     def fit_predict(self, X, must_link=np.array([]), cannot_link=np.array([])):
         """ Fit COP Kmeans clustering to the data given the constraints.
@@ -148,7 +154,7 @@ class COPKMeans(BaseEstimator):
         for i in range(n_chunks):
             X_chunk = X[i*self.chunk_size:(i+1)*self.chunk_size, :]
             # compute the distance to each cluster centroid
-            D_matrix = fast_distance_matrix(X_chunk, self.cluster_centers_)
+            D_matrix = self.dist.pairwise_multiple(X_chunk, self.cluster_centers_)
             # select the centroid with the lowest distance
             cc_indices = np.argsort(D_matrix, axis=1)
             labels[i*self.chunk_size:(i+1)*self.chunk_size] = cc_indices[:, 0].T
@@ -199,7 +205,7 @@ class COPKMeans(BaseEstimator):
             labels = np.ones(self.n_samples, dtype=int) * -1
 
             # 1. compute the distance matrix
-            self.D_matrix_ = fast_distance_matrix(data, old_centers)
+            self.D_matrix_ = self.dist.pairwise_multiple(data, old_centers)
 
             # 2. assign the points to clusters
             for i in range(self.n_samples):
@@ -247,7 +253,7 @@ class COPKMeans(BaseEstimator):
             probs = np.ones(self.n_samples)
 
             while len(centers) < k:
-                D2 = np.array([min([np.linalg.norm(x - c)**2 for c in centers]) for x in data])
+                D2 = np.array([min([self.dist.pairwise_single(x, c)**2 for c in centers]) for x in data])
                 if D2.sum() == 0:
                     break
                 else:
@@ -333,7 +339,7 @@ class COPKMeans(BaseEstimator):
 
         d = 0.0
         for i in range(len(centers)):
-            d += np.linalg.norm(centers[i, :] - old_centers[i, :])
+            d += self.dist.pairwise_single(centers[i, :], old_centers[i, :])
         if d < self.e:
             return True
         else:
@@ -418,6 +424,6 @@ class COPKMeans(BaseEstimator):
 
         inertia = 0.0
         for i, l in enumerate(labels):
-            inertia += np.linalg.norm(data[i, :] - centers[l, :])
+            inertia += self.dist.pairwise_single(data[i, :], centers[l, :])
 
         return inertia

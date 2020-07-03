@@ -16,7 +16,6 @@ import numpy as np
 
 from sklearn.utils.validation import check_X_y
 from sklearn.base import BaseEstimator
-from sklearn.neighbors import DistanceMetric
 from sklearn.neighbors import BallTree
 
 from .base import BaseDetector
@@ -39,6 +38,7 @@ class kNNO(BaseEstimator, BaseDetector):
 
     metric : string (default=euclidean)
         Distance metric for constructing the BallTree.
+        Can be any of sklearn.neighbors.DistanceMetric methods or 'dtw'
     
     Attributes
     ----------
@@ -93,10 +93,10 @@ class kNNO(BaseEstimator, BaseDetector):
         self.k = min(self.k, n)
 
         # construct the neighbors tree
-        self.tree_ = BallTree(X, leaf_size=32, metric=self.metric)
+        self.dist.fit(X)
 
         # COST: anomaly scores of the training data
-        D, _ = self.tree_.query(X, k=self.k+1, dualtree=True)
+        D, _ = self.dist.search_neighbors(X, k=self.k, exclude_first=True)
         self.scores_ = self._get_distances_by_method(D)
         self._process_anomaly_scores()
         
@@ -120,7 +120,7 @@ class kNNO(BaseEstimator, BaseDetector):
         X, _ = check_X_y(X, np.zeros(X.shape[0]))
 
         # compute the anomaly scores
-        D, _ = self.tree_.query(X, k=self.k, dualtree=True)
+        D, _ = self.dist.search_neighbors(X, k=self.k, exclude_first=False)
         scores = self._get_distances_by_method(D)
 
         return scores
@@ -140,6 +140,6 @@ class kNNO(BaseEstimator, BaseDetector):
         """
 
         if self.weighted:
-            return np.mean(D[:, 1:], axis=1)
+            return np.mean(D, axis=1)
         else:
             return D[:, -1].flatten()
