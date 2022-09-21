@@ -2,7 +2,7 @@
 from ._base import BaseDetector
 
 # UNSUPERVISED
-from ._knno import kNNo
+from ._knno import kNNO
 from ._inne import iNNE
 
 # SEMI-SUPERVISED

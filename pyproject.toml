@@ -4,3 +4,22 @@ requires = [
     "wheel"
 ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "anomatools"
+version = "3.0.3"
+authors = [
+  { name="Vincent Vercruyssen", email="V.Vercruyssen@egmail.com" },
+]
+description = "A compact toolbox for semi-supervised anomaly detection"
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/Vincent-Vercruyssen/anomatools"
+

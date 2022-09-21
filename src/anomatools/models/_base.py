@@ -50,6 +50,8 @@ class BaseDetector(metaclass=ABCMeta):
     ):
 
         self.scaler = scaler
+        self.metric = metric
+        self.metric_params = metric_params
         self.dist = DistanceFun(metric, metric_params)
         self.verbose = verbose
         self.tol = Config.tolerance

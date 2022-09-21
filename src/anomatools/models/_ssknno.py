@@ -16,7 +16,7 @@ import numpy as np
 from sklearn.base import BaseEstimator
 
 from ._base import BaseDetector
-from ._knno import kNNo
+from ._knno import kNNO
 from .scalers import NoneScaler, SquashScaler
 
 
@@ -76,7 +76,7 @@ class SSkNNO(BaseEstimator, BaseDetector):
         self.k = k
         self.method = method
         self.supervision = supervision
-        self.base_detector = kNNo(
+        self.base_detector = kNNO(
             k=k,
             method=method,
             scaler=SquashScaler(),

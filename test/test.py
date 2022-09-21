@@ -12,7 +12,7 @@ from sklearn.cluster import KMeans
 
 from anomatools.utils.utils import DistanceFun
 from anomatools.models import BaseDetector
-from anomatools.models import kNNo
+from anomatools.models import kNNO
 from anomatools.models import iNNE
 from anomatools.models import ClusterBasedAD
 from anomatools.models import SSDO

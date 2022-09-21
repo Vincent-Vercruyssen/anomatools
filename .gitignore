@@ -183,3 +183,7 @@ build/
 # other
 data/
 _old/
+
+# envs
+testvenv/
+devvenv/

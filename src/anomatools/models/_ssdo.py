@@ -16,7 +16,7 @@ import scipy.stats as sps
 from sklearn.base import BaseEstimator
 
 from ._base import BaseDetector
-from ._knno import kNNo
+from ._knno import kNNO
 from .scalers import NoneScaler
 
 
@@ -62,7 +62,7 @@ class SSDO(BaseEstimator, BaseDetector):
         self,
         k=30,
         alpha=2.3,
-        base_detector=kNNo(),
+        base_detector=kNNO(),
         scaler=NoneScaler(),
         metric="euclidean",
         metric_params={},

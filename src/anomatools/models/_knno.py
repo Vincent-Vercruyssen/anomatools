@@ -24,7 +24,7 @@ from .scalers import SquashScaler
 # ----------------------------------------------------------------------------
 
 
-class kNNo(BaseEstimator, BaseDetector):
+class kNNO(BaseEstimator, BaseDetector):
     """
     The k-Nearest Neighbor anomaly detector detects anomalies by
     computing the distances between neighboring instances. Instances
