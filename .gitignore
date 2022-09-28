@@ -170,12 +170,6 @@ cython_debug/
 # python egg metadata
 /*.egg-info
 
-# build
-build/
-
-# rest
-.ipynb_checkpoints
-
 # editor
 .vscode/
 .DS_Store
@@ -187,3 +181,6 @@ _old/
 # envs
 testvenv/
 devvenv/
+
+# other
+.idea/
